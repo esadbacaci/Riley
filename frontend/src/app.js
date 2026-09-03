@@ -367,10 +367,17 @@
           body: JSON.stringify(veri),
         });
         const sonuc = await r.json();
-        el.not.textContent = sonuc.restart_required
-          ? "Bu ayar yeniden başlatınca geçerli olacak."
-          : (mesaj || "Kaydedildi.");
-        setTimeout(() => { el.not.textContent = ""; }, 4000);
+        const yenidenBaslat = $("btnYenidenBaslat");
+        if (sonuc.restart_required) {
+          el.not.textContent = "Bu ayar yeniden başlatınca geçerli olacak.";
+          yenidenBaslat.hidden = !window.rileyWindow;   // tarayıcıda elle
+          if (!window.rileyWindow) {
+            el.not.textContent += " Riley'yi kapatıp açın.";
+          }
+        } else {
+          el.not.textContent = mesaj || "Kaydedildi.";
+          setTimeout(() => { el.not.textContent = ""; }, 4000);
+        }
       } catch {
         el.not.textContent = "Ayar kaydedilemedi.";
       }
@@ -454,6 +461,22 @@
     $("btnAyar").classList.toggle("on", ac);
     if (ac) { ayarlariYukle(); sesler.arac(); }
   }
+  $("btnYenidenBaslat").addEventListener("click", async () => {
+    const dugme = $("btnYenidenBaslat");
+    dugme.textContent = "YENİDEN BAŞLATILIYOR...";
+    dugme.disabled = true;
+    log("Arka uç yeniden başlatılıyor...", "warn");
+    try {
+      await window.rileyWindow.restartBackend();
+    } catch { /* bağlantı zaten kopacak */ }
+    setTimeout(() => {
+      dugme.textContent = "YENİDEN BAŞLAT";
+      dugme.disabled = false;
+      dugme.hidden = true;
+      el.not.textContent = "";
+    }, 6000);
+  });
+
   $("btnAyar").addEventListener("click", () => cekmeceAc(el.drawer.hidden));
   $("btnAyarKapat").addEventListener("click", () => cekmeceAc(false));
 

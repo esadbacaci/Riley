@@ -34,7 +34,7 @@ hareket eden bir reaktör, canlı sistem göstergeleri, hangi aracı ne zaman
 | **Tamamen yerel** | Ses, metin ve model — hiçbiri makineden çıkmaz |
 | **Türkçe** | Türkçe konuşur, Türkçe anlar, Türkçe seslendirir |
 | **Adıyla uyanır** | "Riley, ..." demeniz yeter; kısayol tuşu da var |
-| **Gerçekten iş yapar** | 33 beceri: uygulama, dosya, ses, ekran, web, hatırlatıcı |
+| **Gerçekten iş yapar** | 38 beceri: uygulama, pencere, dosya, ses, ekran, web, hatırlatıcı |
 | **Onay ister** | Silme, kapatma gibi geri alınamaz işlerde sorar |
 | **Hatırlar** | "Bunu unutma" dediğiniz şeyler oturumlar arası kalır |
 | **Sözü kesilebilir** | Konuşurken araya girin, susar ve sizi dinler |
@@ -153,12 +153,13 @@ hiçbir ses dosyası içermez ve Riley'nin durumuna göre değişir.
 ## Beceriler
 
 <details>
-<summary><b>33 becerinin tam listesi</b></summary>
+<summary><b>38 becerinin tam listesi</b></summary>
 
-**Uygulamalar** — `open_app`, `close_app`, `list_windows`, `focus_window`
+**Uygulamalar ve pencereler** — `open_app`, `close_app`, `list_windows`,
+`focus_window`, `get_active_window`, `snap_window`, `close_window`, `minimize_all`
 
-**Dosyalar** — `search_files`, `list_dir`, `read_file`, `write_file`,
-`open_path`, `delete_path`*
+**Dosyalar** — `search_files`, `search_in_files`, `list_dir`, `read_file`,
+`write_file`, `open_path`, `delete_path`*
 
 **Sistem** — `set_volume`, `get_volume`, `mute`, `media_control`,
 `take_screenshot`, `system_stats`, `lock_screen`, `shutdown`*, `cancel_shutdown`,

@@ -45,11 +45,16 @@ def _console(event: dict) -> None:
     elif kind in ("tool.start", "tool.end"):
         extra = event.get("args") or event.get("result") or ""
         detay = f"{event.get('name')} {extra}"
+    satir = f"{etiket:<7} {str(detay)[:220]}"
     try:
-        print(f"[{stamp}] {etiket:<7} {str(detay)[:220]}", flush=True)
+        print(f"[{stamp}] {satir}", flush=True)
     except UnicodeEncodeError:  # konsol kod sayfası dar olabilir
-        print(f"[{stamp}] {etiket:<7} {str(detay)[:220].encode('ascii', 'replace').decode()}",
-              flush=True)
+        print(f"[{stamp}] {satir.encode('ascii', 'replace').decode()}", flush=True)
+
+    # Konsol uçucudur; aynı satır döndürmeli dosyaya da yazılır
+    from core.gunluk import yaz
+
+    yaz(satir, event.get("level", "info") if kind == "log" else "info")
 
 
 class EventBus:

@@ -1,5 +1,5 @@
 """Tum beceri modüllerini yükler; import edilmeleri kayıt için yeterlidir."""
-from skills import apps, files, misc, system, web  # noqa: F401
+from skills import apps, arama, files, misc, pencere, system, web  # noqa: F401
 from skills.registry import (  # noqa: F401
     REGISTRY,
     ConfirmationRequired,

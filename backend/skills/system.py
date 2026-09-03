@@ -164,6 +164,34 @@ def take_screenshot(monitor: int = 1) -> str:
 
 
 # --- Pano ----------------------------------------------------------------
+#
+# Pano, ekran kilitliyken ya da başka bir uygulama panoyu tutarken erişime
+# kapalı olabilir. Bu durumda ham COM hatası yerine anlaşılır bir mesaj
+# dönmeli ki Riley kullanıcıya ne olduğunu söyleyebilsin.
+
+
+def _pano_oku() -> str:
+    import pyperclip
+
+    try:
+        return pyperclip.paste() or ""
+    except Exception as exc:
+        raise SkillError(
+            "Panoya erişemedim. Ekran kilitliyse ya da başka bir uygulama "
+            f"panoyu kullanıyorsa bu olabilir. ({type(exc).__name__})"
+        ) from exc
+
+
+def _pano_yaz(metin: str) -> None:
+    import pyperclip
+
+    try:
+        pyperclip.copy(metin)
+    except Exception as exc:
+        raise SkillError(
+            "Panoya yazamadım. Ekran kilitliyse ya da başka bir uygulama "
+            f"panoyu kullanıyorsa bu olabilir. ({type(exc).__name__})"
+        ) from exc
 
 
 @skill(
@@ -172,9 +200,7 @@ def take_screenshot(monitor: int = 1) -> str:
     level="narrow",
 )
 def clipboard_read() -> str:
-    import pyperclip
-
-    text = pyperclip.paste() or ""
+    text = _pano_oku()
     if not text.strip():
         return "Pano boş."
     return f"Panodaki metin: {text[:1500]}"
@@ -187,9 +213,7 @@ def clipboard_read() -> str:
     required=["text"],
 )
 def clipboard_write(text: str) -> str:
-    import pyperclip
-
-    pyperclip.copy(text)
+    _pano_yaz(text)
     return "Metin panoya kopyalandı."
 
 
@@ -203,12 +227,30 @@ def clipboard_write(text: str) -> str:
     required=["text"],
 )
 def type_text(text: str) -> str:
+    import time
+
     import pyautogui
     import pyperclip
 
     # Türkçe karakterler pyautogui.write ile bozulur; pano + Ctrl+V güvenli yol.
-    pyperclip.copy(text)
-    pyautogui.hotkey("ctrl", "v")
+    # Ama kullanıcının panosu bize ait değil: ödünç alıp geri veriyoruz.
+    onceki = None
+    try:
+        onceki = pyperclip.paste()
+    except Exception:
+        pass                       # pano okunamıyorsa geri verecek bir şey yok
+
+    _pano_yaz(text)
+    try:
+        pyautogui.hotkey("ctrl", "v")
+        time.sleep(0.15)           # yapıştırma tamamlansın
+    finally:
+        if onceki is not None:
+            try:
+                pyperclip.copy(onceki)
+            except Exception:
+                pass
+
     return f"{len(text)} karakter yazıldı."
 
 

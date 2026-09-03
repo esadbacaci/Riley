@@ -165,6 +165,17 @@ ipcMain.on("window:toggle-maximize", () => {
 });
 ipcMain.on("window:close", () => win && win.hide());
 
+// Ayarlardan gelen yeniden başlatma isteği: arka ucu kapatıp yeniden açar.
+// Arayüz zaten bağlantı kopunca kendiliğinden yeniden bağlanıyor.
+ipcMain.handle("backend:restart", async () => {
+  if (process.env.RILEY_NO_BACKEND === "1") return { ok: false, reason: "harici" };
+  console.log("[riley] arka uç yeniden başlatılıyor");
+  stopBackend();
+  await new Promise((r) => setTimeout(r, 1500));
+  startBackend();
+  return { ok: true };
+});
+
 /* ------------------------------------------------------------- yaşam --- */
 
 const single = app.requestSingleInstanceLock();
