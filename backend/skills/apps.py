@@ -37,7 +37,7 @@ _START_MENU_DIRS = [
 
 @lru_cache(maxsize=1)
 def _shortcut_index() -> dict[str, str]:
-    """Start Menu'deki tum kısayolları {kucuk_isim: yol} olarak tarar."""
+    """Başlat menüsündeki tüm kısayolları {küçük_isim: yol} olarak tarar."""
     index: dict[str, str] = {}
     for base in _START_MENU_DIRS:
         if not base.exists():
@@ -52,7 +52,7 @@ def _shortcut_index() -> dict[str, str]:
 
 
 def _fold(text: str) -> str:
-    """Turkce karakterleri sadeleştirir; 'Görev' ile 'gorev' aynı kabul edilsin."""
+    """Türkçe karakterleri sadeleştirir; 'Görev' ile 'gorev' aynı kabul edilsin."""
     table = str.maketrans("ıİşŞğĞüÜöÖçÇ", "iisSgGuUoOcC")
     return text.strip().lower().translate(table)
 

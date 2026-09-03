@@ -1,4 +1,4 @@
-"""Merkezi yapılandırma. Tum yollar ve ayarlar buradan okunur."""
+"""Merkezi yapılandırma. Tüm yollar ve ayarlar buradan okunur."""
 from __future__ import annotations
 
 import json

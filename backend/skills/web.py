@@ -39,7 +39,7 @@ def _unwrap(url: str) -> str:
     name="web_search",
     description=(
         "Internette arama yapar ve ilk sonuçların başlıklarını, özetlerini ve "
-        "adreslerini döndürür. Guncel bilgi, haber, fiyat, hava durumu gibi "
+        "adreslerini döndürür. Güncel bilgi, haber, fiyat, hava durumu gibi "
         "eğitim verinde olmayan şeyler sorulunca kullan."
     ),
     params={

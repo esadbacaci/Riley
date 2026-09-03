@@ -100,7 +100,7 @@ _MEDIA_KEYS = {
     name="media_control",
     description=(
         "Muzik veya video oynatmayı kontrol eder: oynat-duraklat, sonraki parça, "
-        "önceki parça, durdur. Spotify ve YouTube dahil tum uygulamalarda çalışır."
+        "önceki parça, durdur. Spotify ve YouTube dahil tüm uygulamalarda çalışır."
     ),
     params={
         "action": {
@@ -139,7 +139,7 @@ def media_control(action: str) -> str:
     params={
         "monitor": {
             "type": "integer",
-            "description": "Ekran numarası; 0 = tum ekranlar, 1 = birincil ekran",
+            "description": "Ekran numarası; 0 = tüm ekranlar, 1 = birincil ekran",
         }
     },
 )
@@ -348,7 +348,7 @@ def shutdown(mode: str, delay_seconds: int = 30) -> str:
     flag = "/s" if mode == "shutdown" else "/r"
     subprocess.run(["shutdown", flag, "/t", str(max(0, int(delay_seconds)))], check=False)
     label = "kapatılacak" if mode == "shutdown" else "yeniden başlatılacak"
-    return f"Bilgisayar {delay_seconds} saniye sonra {label}. Iptal için iptal et de."
+    return f"Bilgisayar {delay_seconds} saniye sonra {label}. İptal için iptal et de."
 
 
 @skill(

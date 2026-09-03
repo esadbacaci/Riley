@@ -40,9 +40,11 @@ def _sadelestir(metin: str) -> str:
 @skill(
     name="search_in_files",
     description=(
-        "Dosyaların İÇİNDE metin arar ve eşleşen satırı gösterir. Kullanıcı "
-        "'içinde şu geçen dosya', 'şunu nerede yazmıştım' gibi bir şey "
-        "sorduğunda kullan. Dosya adında aramak için search_files kullan."
+        "Dosyaların İÇERİĞİNDE metin arar ve eşleşen satırı gösterir. "
+        "'İçinde X geçen dosya', 'X'i nerede yazmıştım', 'şu kelimenin geçtiği "
+        "belge' gibi isteklerde bunu kullan; dosya adına bakan search_files "
+        "değil. Kullanıcının verdiği kelimeyi olduğu gibi ara, başka dile "
+        "çevirme, Türkçe kelimeyi Türkçe ara."
     ),
     params={
         "query": {"type": "string", "description": "Dosya içinde aranacak metin"},

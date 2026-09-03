@@ -161,12 +161,12 @@ class Agent:
 
         for round_index in range(CFG.llm.max_tool_rounds):
             buffer = ""          # TTS için cümle biriktirici
-            visible = ""         # bu turda üretilen tum metin
+            visible = ""         # bu turda üretilen tüm metin
             calls: list[dict] = []
 
             async for event in llm.chat_stream(messages, tools=tool_schemas()):
                 if machine.cancelled:
-                    await bus.log("Istek kullanıcı tarafından iptal edildi.", "warn")
+                    await bus.log("İstek kullanıcı tarafından iptal edildi.", "warn")
                     return ""
 
                 kind = event["kind"]
@@ -284,7 +284,7 @@ class Agent:
             await machine.set(State.THINKING)
         else:
             final_text = (
-                "Bu istek için cok fazla adım gerekti, burada durdum. "
+                "Bu istek için çok fazla adım gerekti, burada durdum. "
                 "Daha küçük parçalara bölebilir miyiz?"
             )
             await self.speak(final_text)

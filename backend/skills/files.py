@@ -40,7 +40,23 @@ def _expand(raw: str) -> Path:
     if sep and head.lower() in turkish:
         return Path.home() / turkish[head.lower()] / tail
 
-    return Path(os.path.expandvars(os.path.expanduser(text)))
+    yol = Path(os.path.expandvars(os.path.expanduser(text)))
+    if yol.exists() or yol.is_absolute():
+        return yol
+
+    # Kullanıcı çıplak bir ad söylemiş olabilir ("Riley klasöründe ara").
+    # Olağan yerlerde aynı adlı bir klasör ya da dosya var mı diye bak.
+    for kok in (
+        Path.home() / "Desktop",
+        Path.home() / "Documents",
+        Path.home() / "Downloads",
+        Path.home(),
+    ):
+        aday = kok / text
+        if aday.exists():
+            return aday
+
+    return yol
 
 
 def _assert_writable(path: Path) -> None:
@@ -138,7 +154,7 @@ def read_file(path: str) -> str:
     if target.is_dir():
         raise SkillError("Bu bir klasör; içeriği için list_dir kullan.")
     if target.stat().st_size > 5_000_000:
-        raise SkillError("Dosya cok büyük (5 MB üzeri).")
+        raise SkillError("Dosya çok büyük (5 MB üzeri).")
 
     try:
         text = target.read_text(encoding="utf-8")
