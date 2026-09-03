@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Riley</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <!-- üst çubuk: pencere sürükleme alanı -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" id="brandMark">Riley</span>
+      <span class="sep">//</span>
+      <span class="tag" id="connTag">BAĞLANIYOR</span>
+    </div>
+    <div class="topmeta">
+      <span id="modelTag" class="chip" title="Kullanılan dil modeli">model: —</span>
+      <span id="clock" class="chip">--:--</span>
+      <button id="btnSes" class="chip toggle on" title="Atmosfer sesini aç/kapat">SES</button>
+      <button id="btnAyar" class="chip toggle" title="Ayarlar">AYARLAR</button>
+      <button id="btnKilavuz" class="chip toggle" title="Kullanım kılavuzu (F1)">KILAVUZ</button>
+    </div>
+    <div class="wincontrols">
+      <button class="wbtn" id="btnMin" title="Küçült">&#8211;</button>
+      <button class="wbtn" id="btnMax" title="Büyüt">&#9633;</button>
+      <button class="wbtn danger" id="btnClose" title="Kapat">&#10005;</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <!-- SOL: telemetri, sistemler, hızlı eylemler -->
+    <aside class="panel left">
+      <div class="panel-title">TELEMETRİ</div>
+
+      <div class="gauge">
+        <div class="gauge-head"><span>İŞLEMCİ</span><b id="cpuVal">0%</b></div>
+        <div class="bar"><i id="cpuBar"></i></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-head"><span>BELLEK</span><b id="ramVal">0%</b></div>
+        <div class="bar"><i id="ramBar"></i></div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-head"><span>EKRAN KARTI</span><b id="gpuVal">—</b></div>
+        <div class="bar"><i id="gpuBar"></i></div>
+      </div>
+
+      <div class="panel-title mt">SİSTEMLER</div>
+      <ul class="syslist">
+        <li data-step="llm"><i></i><span>DİL MODELİ</span><b>bekliyor</b></li>
+        <li data-step="stt"><i></i><span>KONUŞMA TANIMA</span><b>bekliyor</b></li>
+        <li data-step="tts"><i></i><span>SES SENTEZİ</span><b>bekliyor</b></li>
+        <li data-step="mic"><i></i><span>MİKROFON</span><b>bekliyor</b></li>
+      </ul>
+
+      <div class="panel-title mt">HIZLI EYLEM</div>
+      <div class="quick">
+        <button data-cmd="Ekran görüntüsü al.">EKRAN AL</button>
+        <button data-cmd="Bilgisayarın durumu nasıl?">DURUM</button>
+        <button data-cmd="Sesi yüzde otuz yap.">SES %30</button>
+        <button data-cmd="Bilgisayarı kilitle.">KİLİTLE</button>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="wake-hint">
+        <div class="hint" id="hotkeyHint">Ctrl + Alt + R</div>
+        <div class="hint dim" id="wakeHint">veya "Riley, ..." diye seslen</div>
+      </div>
+    </aside>
+
+    <!-- ORTA: reaktör + konuşma -->
+    <section class="core">
+      <canvas id="reactor"></canvas>
+      <div class="statepill" id="statePill">BAŞLATILIYOR</div>
+
+      <div class="dialogue">
+        <div class="you" id="youLine"></div>
+        <div class="me" id="meLine"></div>
+      </div>
+
+      <div class="confirm" id="confirmBox" hidden>
+        <div class="confirm-q" id="confirmQ"></div>
+        <div class="confirm-actions">
+          <button class="cbtn yes" id="btnYes">ONAYLA</button>
+          <button class="cbtn no" id="btnNo">İPTAL</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SAĞ: sekmeli panel -->
+    <aside class="panel right">
+      <div class="tabs">
+        <button class="tab active" data-tab="feed">ETKİNLİK</button>
+        <button class="tab" data-tab="chat">SOHBET</button>
+        <button class="tab" data-tab="skills">BECERİLER</button>
+      </div>
+
+      <div class="tabpane active" id="pane-feed">
+        <div class="feed" id="feed"></div>
+      </div>
+
+      <div class="tabpane" id="pane-chat">
+        <div class="chat" id="chat">
+          <div class="empty">Henüz konuşma yok.</div>
+        </div>
+      </div>
+
+      <div class="tabpane" id="pane-skills">
+        <input class="search" id="skillSearch" type="text"
+               placeholder="beceri ara..." autocomplete="off" />
+        <div class="skills" id="skills"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- alt: giriş -->
+  <footer class="dock">
+    <button class="mic" id="btnListen" title="Dinlemeyi başlat (Boşluk)">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3z"/>
+        <path d="M19 11a7 7 0 0 1-14 0M12 18v3" fill="none"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <input id="input" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Komut yaz ya da mikrofona bas..." />
+    <button class="ghost" id="btnStop" title="Konuşmayı kes (Esc)">DUR</button>
+    <button class="ghost" id="btnReset" title="Sohbeti sıfırla">SIFIRLA</button>
+  </footer>
+
+  <!-- ayarlar çekmecesi -->
+  <div class="drawer" id="drawer" hidden>
+    <div class="drawer-head">
+      <span>AYARLAR</span>
+      <button class="wbtn" id="btnAyarKapat">&#10005;</button>
+    </div>
+    <div class="drawer-body">
+      <label class="field">
+        <span>Konuşma hızı <b id="hizVal">0.80</b></span>
+        <input type="range" id="setHiz" min="0.6" max="1.3" step="0.02" value="0.8" />
+        <small>Küçük değer daha hızlı konuşur.</small>
+      </label>
+
+      <label class="field">
+        <span>Atmosfer sesi <b id="sesVal">%50</b></span>
+        <input type="range" id="setSesSeviye" min="0" max="100" step="5" value="50" />
+      </label>
+
+      <label class="field">
+        <span>Uyandırma</span>
+        <select id="setUyandirma">
+          <option value="name">Adıyla seslenerek ("Riley, ...")</option>
+          <option value="wakeword">Hazır uyandırma modeli</option>
+          <option value="off">Kapalı (yalnızca kısayol)</option>
+        </select>
+        <small>Değişiklik yeniden başlatmada geçerli olur.</small>
+      </label>
+
+      <label class="field">
+        <span>Devam penceresi <b id="devamVal">8 sn</b></span>
+        <input type="range" id="setDevam" min="0" max="30" step="1" value="8" />
+        <small>Cevaptan sonra adı söylemeden konuşabileceğin süre.</small>
+      </label>
+
+      <label class="field">
+        <span>Dil modeli</span>
+        <select id="setModel"></select>
+      </label>
+
+      <label class="field">
+        <span>Hitap</span>
+        <input type="text" id="setHitap" maxlength="24" />
+      </label>
+
+      <label class="field">
+        <span>Yetki seviyesi</span>
+        <select id="setYetki">
+          <option value="narrow">Dar — sadece okuma ve uygulama açma</option>
+          <option value="medium">Orta — dosya ve sistem, yıkıcı işlemde onay</option>
+          <option value="wide">Geniş — her şey, sadece kritik işlemde onay</option>
+        </select>
+      </label>
+
+      <div class="field">
+        <span>Hatırlananlar</span>
+        <div class="memlist" id="memlist"></div>
+      </div>
+
+      <div class="drawer-note" id="ayarNot"></div>
+    </div>
+  </div>
+
+
+  <!-- gömülü kullanım kılavuzu -->
+  <div class="kilavuz" id="kilavuz" hidden>
+    <div class="kilavuz-kutu">
+      <div class="kilavuz-head">
+        <span>KULLANIM KILAVUZU</span>
+        <button class="wbtn" id="btnKilavuzKapat">&#10005;</button>
+      </div>
+
+      <nav class="kilavuz-nav">
+        <button class="knav active" data-bolum="baslangic">BAŞLANGIÇ</button>
+        <button class="knav" data-bolum="komutlar">KOMUTLAR</button>
+        <button class="knav" data-bolum="ekran">EKRAN</button>
+        <button class="knav" data-bolum="ayarlar">AYARLAR</button>
+        <button class="knav" data-bolum="sorun">SORUN ÇÖZME</button>
+      </nav>
+
+      <div class="kilavuz-govde">
+        <section class="kbolum active" id="k-baslangic">
+          <h3>Riley ile konuşmanın üç yolu</h3>
+          <div class="kkart">
+            <b>1. Adıyla seslen</b>
+            <p>Mikrofon sürekli dinler ama yalnızca adın geçtiği cümlelere
+            karşılık verir. Cümlene adıyla başla:</p>
+            <code>Riley, sesi kıs</code>
+            <code>Riley, ekran görüntüsü al</code>
+            <p class="ipucu">"Asistan" diye de seslenebilirsin.</p>
+          </div>
+          <div class="kkart">
+            <b>2. Kısayol tuşu</b>
+            <p>Hangi pencerede olursan ol <kbd>Ctrl</kbd> + <kbd>Alt</kbd> +
+            <kbd>R</kbd> bas, sonra doğrudan komutunu söyle. Adını söylemene
+            gerek yok.</p>
+          </div>
+          <div class="kkart">
+            <b>3. Yazarak</b>
+            <p>Alttaki kutuya yaz ve <kbd>Enter</kbd>'a bas. Mikrofon kapalıyken
+            de çalışır.</p>
+          </div>
+
+          <h3>Devam penceresi</h3>
+          <p>Riley cevap verdikten sonra <b>8 saniye</b> boyunca adını
+          söylemeden konuşmaya devam edebilirsin. Sohbet böyle akıcı ilerler.
+          Süreyi Ayarlar'dan değiştirebilirsin.</p>
+
+          <h3>Sözünü kesmek</h3>
+          <p>Riley konuşurken <kbd>Esc</kbd>'ye bas ya da <b>DUR</b> düğmesine
+          tıkla. Sesli olarak "dur", "sus" veya "yeter" de yeterli.</p>
+        </section>
+
+        <section class="kbolum" id="k-komutlar">
+          <h3>Neler söyleyebilirsin</h3>
+
+          <div class="kgrup">
+            <b>Uygulamalar</b>
+            <code>Chrome'u aç</code>
+            <code>Not defterini aç</code>
+            <code>Spotify'ı kapat</code>
+            <code>Açık pencereleri listele</code>
+          </div>
+
+          <div class="kgrup">
+            <b>Ses ve medya</b>
+            <code>Sesi yüzde otuza indir</code>
+            <code>Sesi kapat</code>
+            <code>Sonraki şarkıya geç</code>
+            <code>Müziği duraklat</code>
+          </div>
+
+          <div class="kgrup">
+            <b>Dosyalar</b>
+            <code>Masaüstüne notlar.txt oluştur, içine alışveriş listesi yaz</code>
+            <code>Masaüstünde rapor diye bir dosya var mı</code>
+            <code>Belgeler klasöründe ne var</code>
+            <code>notlar.txt dosyasını oku ve özetle</code>
+          </div>
+
+          <div class="kgrup">
+            <b>Sistem</b>
+            <code>Bilgisayarın durumu nasıl</code>
+            <code>Ekran görüntüsü al</code>
+            <code>Bilgisayarı kilitle</code>
+            <code>Panodaki metni oku</code>
+          </div>
+
+          <div class="kgrup">
+            <b>İnternet</b>
+            <code>Bugün İstanbul'da hava nasıl</code>
+            <code>YouTube'da lofi müzik ara</code>
+            <code>github.com'u aç</code>
+          </div>
+
+          <div class="kgrup">
+            <b>Zaman ve hafıza</b>
+            <code>Saat kaç</code>
+            <code>On dakika sonra çayı hatırlat</code>
+            <code>Adım Esad, bunu unutma</code>
+            <code>Benim hakkımda ne biliyorsun</code>
+          </div>
+
+          <p class="ipucu">Sağdaki <b>BECERİLER</b> sekmesinde yapabildiği her
+          şeyin tam listesi var. Bir beceriye tıklarsan adı komut kutusuna
+          yazılır.</p>
+        </section>
+
+        <section class="kbolum" id="k-ekran">
+          <h3>Ekrandaki her şey ne anlama geliyor</h3>
+
+          <div class="kkart">
+            <b>Ortadaki reaktör</b>
+            <p>Rengi Riley'nin ne yaptığını söyler:</p>
+            <ul class="renkler">
+              <li><i style="background:#33d6ff"></i> Mavi — hazır ya da konuşuyor</li>
+              <li><i style="background:#3ef2b1"></i> Yeşil — seni dinliyor</li>
+              <li><i style="background:#ffb545"></i> Turuncu — düşünüyor</li>
+              <li><i style="background:#b06cff"></i> Mor — bir araç çalıştırıyor</li>
+              <li><i style="background:#ff5f6d"></i> Kırmızı — hata var</li>
+            </ul>
+            <p>Çevresindeki çubuklar sesle hareket eder: sen konuşurken
+            mikrofonu, o konuşurken kendi sesini gösterir.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Sol panel</b>
+            <p>İşlemci, bellek ve ekran kartı kullanımı canlı olarak akar.
+            Altında dört sistemin durumu var: dil modeli, konuşma tanıma, ses
+            sentezi ve mikrofon. Hepsi <span class="ok">hazır</span> olmalı.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Sağ panel</b>
+            <p><b>Etkinlik</b> — hangi aracı ne zaman çağırdığı, ne sonuç
+            aldığı. Bir şey ters giderse önce buraya bak.<br>
+            <b>Sohbet</b> — konuşmanın tam dökümü.<br>
+            <b>Beceriler</b> — yapabildiklerinin aranabilir listesi.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Onay kutusu</b>
+            <p>Dosya silme, bilgisayarı kapatma gibi geri alınamaz işlerde
+            Riley durur ve sorar. Sesli olarak "evet" ya da "hayır" diyebilir,
+            düğmeye de basabilirsin. 45 saniye cevap gelmezse işlem iptal olur.</p>
+          </div>
+        </section>
+
+        <section class="kbolum" id="k-ayarlar">
+          <h3>Ayarlar ne işe yarıyor</h3>
+
+          <div class="kgrup">
+            <b>Konuşma hızı</b>
+            <p>Küçük değer daha hızlı konuşur. 0.80 önerilen; 1.00 normal hız.</p>
+          </div>
+          <div class="kgrup">
+            <b>Atmosfer sesi</b>
+            <p>Arka plandaki uğultu. Tamamen bilgisayarında üretilir, hiçbir ses
+            dosyası indirilmez. Üstteki <b>SES</b> düğmesiyle kapatabilirsin.</p>
+          </div>
+          <div class="kgrup">
+            <b>Uyandırma</b>
+            <p><b>Adıyla</b> — mikrofon dinler, adın geçince harekete geçer.<br>
+            <b>Hazır model</b> — akustik uyandırma modeli kullanır.<br>
+            <b>Kapalı</b> — mikrofon hiç açılmaz, yalnızca kısayol ve yazı.</p>
+          </div>
+          <div class="kgrup">
+            <b>Yetki seviyesi</b>
+            <p><b>Dar</b> — sadece okur ve uygulama açar, hiçbir dosyaya
+            dokunmaz.<br>
+            <b>Orta</b> — Masaüstü, Belgeler ve İndirilenler altında dosya
+            işlemi yapabilir; silme ve kapatma onay ister.<br>
+            <b>Geniş</b> — her şey açık.</p>
+          </div>
+          <div class="kgrup">
+            <b>Dil modeli</b>
+            <p>Ollama'da kurulu modeller arasından seçebilirsin. Büyük model
+            daha iyi anlar ama daha yavaştır ve daha çok bellek ister.</p>
+          </div>
+          <div class="kgrup">
+            <b>Hatırlananlar</b>
+            <p>"Bunu unutma" dediğin her şey burada birikir ve her açılışta
+            Riley'ye hatırlatılır. Silmek için "şunu unut" de.</p>
+          </div>
+        </section>
+
+        <section class="kbolum" id="k-sorun">
+          <h3>Bir şeyler ters giderse</h3>
+
+          <div class="kkart">
+            <b>Beni duymuyor</b>
+            <p>Etkinlik akışında <code class="ic">(bana değil)</code> satırları
+            görüyorsan Riley seni duyuyor ama adını anlamıyor demektir. Daha net
+            söyle ya da kısayolu kullan: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>.
+            Sol panelde <b>MİKROFON</b> satırı "hazır" değilse mikrofon izni ya
+            da aygıt sorunu vardır.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Cevap vermiyor, "bağlantı yok" yazıyor</b>
+            <p>Arka uç kapanmış olabilir. Uygulamayı kapatıp yeniden aç.
+            Sürerse <code class="ic">data\logs\server.log</code> dosyasına bak.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Dil modeli satırı kırmızı</b>
+            <p>Ollama çalışmıyor demektir. Komut isteminde
+            <code class="ic">ollama serve</code> çalıştır. Model eksikse
+            <code class="ic">ollama pull qwen3:8b</code>.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Yaptım diyor ama yapmıyor</b>
+            <p>Etkinlik sekmesinden aracın gerçekten çağrılıp çağrılmadığını
+            görebilirsin. Çağrılmamışsa isteğini daha açık söyle:
+            "sesi kıs" yerine "sesi yüzde otuz yap" gibi.</p>
+          </div>
+
+          <div class="kkart">
+            <b>Sessizken alakasız cümleler yazıyor</b>
+            <p>Konuşma tanıma modelinin bilinen davranışı. Riley bunların
+            çoğunu süzer ve komut olarak işlemez; yok sayabilirsin.</p>
+          </div>
+
+          <p class="ipucu">Kısayollar: <kbd>Boşluk</kbd> dinlemeyi başlatır ·
+          <kbd>Esc</kbd> susturur · <kbd>F1</kbd> bu kılavuzu açar</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="src/audio.js"></script>
+  <script src="src/hud.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

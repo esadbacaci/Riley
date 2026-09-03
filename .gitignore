@@ -1,0 +1,28 @@
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Node / Electron ---
+node_modules/
+dist/
+build/
+
+# Derlenmis calistirilabilir: GitHub Releases uzerinden dagitilir
+Riley.exe
+
+# --- Indirilen modeller (kurulum betigi getirir) ---
+models/piper/*.onnx
+models/piper/*.onnx.json
+models/whisper/
+models/wakeword/*.onnx
+models/wakeword/*.tflite
+tools/piper/
+
+# --- Calisma zamani verisi ---
+data/settings.json
+data/memory.json
+data/logs/
+data/captures/
+.env

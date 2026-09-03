@@ -1,0 +1,45 @@
+{
+  "name": "riley",
+  "version": "0.1.0",
+  "description": "Riley - yerel, Türkçe konuşan sesli yapay zekâ asistanı",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "set RILEY_NO_BACKEND=1&& electron .",
+    "build": "electron-builder --win portable"
+  },
+  "author": "Esad",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.esadbacaci.riley",
+    "productName": "Riley",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**",
+      "frontend/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Riley.exe"
+    },
+    "portable": {
+      "artifactName": "Riley.exe",
+      "unpackDirName": "riley-app"
+    },
+    "compression": "maximum"
+  }
+}
