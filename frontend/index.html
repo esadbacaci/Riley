@@ -172,6 +172,16 @@
       </label>
 
       <label class="field">
+        <span>Ses tanıma modeli</span>
+        <select id="setSttModel">
+          <option value="small">Small — hızlı, dengeli (önerilen)</option>
+          <option value="deepdml/faster-whisper-large-v3-turbo-ct2">Turbo — daha doğru, ~1 GB fazla bellek</option>
+          <option value="base">Base — en hızlı, en az doğru</option>
+        </select>
+        <small>Değişiklik yeniden başlatmada geçerli olur.</small>
+      </label>
+
+      <label class="field">
         <span>Hitap</span>
         <input type="text" id="setHitap" maxlength="24" />
       </label>

@@ -187,8 +187,20 @@
       if (this.droneGain) this._rampa(this.droneGain.gain, 0, 1.2);
     }
 
-    uyandi() { this._ton(880, 0.16, "sine", 0.16, 440); }
-    dinliyor() { this._ton(1320, 0.1, "sine", 0.1); }
+    /* Uyanma: kısa, yükselen iki nota — "seni duydum" */
+    uyandi() {
+      this._ton(660, 0.09, "sine", 0.13);
+      setTimeout(() => this._ton(990, 0.16, "sine", 0.15), 70);
+    }
+
+    /* Dinlemeye başladı: tek, ince cıvıltı */
+    dinliyor() { this._ton(1320, 0.09, "sine", 0.09); }
+
+    /* Uykuya döndü: alçalan iki nota — "işim bitti, bekliyorum" */
+    uyku() {
+      this._ton(720, 0.12, "sine", 0.09);
+      setTimeout(() => this._ton(480, 0.26, "sine", 0.08), 95);
+    }
     onay() { this._ton(660, 0.12, "sine", 0.14); setTimeout(() => this._ton(990, 0.18, "sine", 0.12), 90); }
     hata() { this._ton(220, 0.3, "sawtooth", 0.1, -60); }
     arac() { this._ton(1760, 0.06, "square", 0.045); }

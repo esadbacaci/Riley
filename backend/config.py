@@ -33,14 +33,17 @@ class LLMConfig:
 
 @dataclass
 class STTConfig:
-    model_size: str = "small"          # tiny | base | small | medium
+    # tiny | base | small | medium | deepdml/faster-whisper-large-v3-turbo-ct2
+    # "small" hız/doğruluk dengesi; turbo daha doğru ama ~1 GB fazla bellek
+    # ister ve iki kat yavaştır.
+    model_size: str = "small"
     # RTX 5060 (Blackwell) için CTranslate2 CUDA desteği henüz oturmadı;
     # "auto" önce GPU dener, hata alırsa CPU'ya düşer.
     device: str = "auto"
     compute_type_gpu: str = "float16"
     compute_type_cpu: str = "int8"
     language: str = "tr"
-    beam_size: int = 1
+    beam_size: int = 5                 # 1 en hızlı, 5 belirgin daha doğru
     vad_aggressiveness: int = 2        # 0-3, yüksek = daha agresif sessizlik kesme
     silence_ms: int = 800              # bu kadar sessizlikten sonra konuşma bitti say
     max_utterance_s: float = 20.0
@@ -48,7 +51,15 @@ class STTConfig:
     # Whisper "Riley" gibi yabancı bir adı Türkçe konuşma içinde tanıyamaz;
     # bu iki ipucu birlikte verildiğinde adı doğru yazıyor.
     initial_prompt: str = "Riley'e sesleniyorum."
-    hotwords: str = "Riley"
+    # Sık geçen uygulama adları ve komut sözcükleri modele ipucu olarak
+    # verilir; bunlar olmadan "Chrome" gibi yabancı adlar sık yanlış yazılıyor.
+    hotwords: str = (
+        "Riley, Google Chrome, Spotify, YouTube, Discord, Steam, Firefox, "
+        "WhatsApp, Telegram, Netflix, Visual Studio Code, Excel, Word, "
+        "not defteri, hesap makinesi, dosya gezgini, "
+        "aç, kapat, başlat, ekran görüntüsü, ses, yüzde, dosya, klasör, "
+        "masaüstü, belgeler, indirilenler, hatırlat, ara, çal, duraklat, kilitle"
+    )
     # Halüsinasyon süzgeci: bu eşiklerin dışındaki çözümlemeler atılır
     no_speech_max: float = 0.6     # konuşma yokluğu olasılığı üst sınırı
     min_logprob: float = -1.0      # ortalama güven alt sınırı

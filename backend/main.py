@@ -256,6 +256,8 @@ _AYARLANABILIR: dict[str, tuple[str, str, type]] = {
     "model": ("llm", "model", str),
     "temperature": ("llm", "temperature", float),
     "perm_level": ("perms", "level", str),
+    "stt_model": ("stt", "model_size", str),
+    "beam_size": ("stt", "beam_size", int),
 }
 
 
@@ -280,7 +282,7 @@ async def update_settings(request: Request) -> JSONResponse:
         except (TypeError, ValueError):
             continue
         uygulanan[anahtar] = deger
-        if anahtar in ("wake_mode", "tts_voice"):
+        if anahtar in ("wake_mode", "tts_voice", "stt_model"):
             yeniden_baslat = True
 
     if "model" in uygulanan:

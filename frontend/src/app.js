@@ -70,7 +70,21 @@
     el.chat.scrollTop = el.chat.scrollHeight;
   }
 
+  let oncekiDurum = "booting";
+
   function setState(value) {
+    // Durum geçişlerine göre kısa ses işaretleri
+    if (value !== oncekiDurum) {
+      const mesguldu = ["listening", "thinking", "acting", "speaking"]
+        .includes(oncekiDurum);
+      if (value === "listening" && oncekiDurum !== "listening") {
+        sesler.dinliyor();
+      } else if (value === "idle" && mesguldu) {
+        sesler.uyku();          // işini bitirdi, beklemeye döndü
+      }
+      oncekiDurum = value;
+    }
+
     document.body.dataset.state = value;
     el.state.textContent = STATE_LABEL[value] || value.toUpperCase();
     reactor.setState(value);
@@ -362,6 +376,10 @@
       $("setDevam").value = cfg.wake.follow_up_s;
       $("devamVal").textContent = `${cfg.wake.follow_up_s} sn`;
       $("setHitap").value = cfg.persona.address;
+      const sttSec = $("setSttModel");
+      if ([...sttSec.options].some((o) => o.value === cfg.stt.model_size)) {
+        sttSec.value = cfg.stt.model_size;
+      }
       $("setYetki").value = cfg.perms.level;
 
       const m = await (await fetch(`${API}/api/models`)).json();
@@ -416,6 +434,8 @@
   });
   $("setHitap").addEventListener("change", (e) =>
     ayarGonder({ address: e.target.value }));
+  $("setSttModel").addEventListener("change", (e) =>
+    ayarGonder({ stt_model: e.target.value }));
   $("setYetki").addEventListener("change", (e) =>
     ayarGonder({ perm_level: e.target.value }, "Yetki seviyesi değişti."));
 

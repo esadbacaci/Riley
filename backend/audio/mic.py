@@ -23,6 +23,7 @@ import time
 
 import numpy as np
 
+from audio.duzeltme import duzelt
 from audio.stt import is_noise, transcriber
 from config import CFG, MODELS_DIR
 from core.bus import bus
@@ -330,6 +331,10 @@ class Listener:
         if not text or is_noise(text):
             machine.set_threadsafe(State.IDLE)
             return
+
+        # Yabancı uygulama adları sık yanlış yazılıyor; komuta çevirmeden
+        # önce bilinen adlara göre düzelt.
+        text = duzelt(text)
 
         komut = self._komuta_cevir(text, armed)
         if komut is None:
