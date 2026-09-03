@@ -21,6 +21,11 @@ let tray = null;
 let backend = null;
 let quitting = false;
 
+// "--tray" ile başlatıldığında (Windows açılışı) pencere açılmaz,
+// Riley sessizce tepsiye yerleşir ve kısayolla çağrılmayı bekler.
+const tepsideBasla = process.argv.includes("--tray");
+const IKON = path.join(__dirname, "..", "build", "icon.ico");
+
 /* ------------------------------------------------------------ arka uç -- */
 
 function startBackend() {
@@ -95,6 +100,7 @@ function createWindow() {
     backgroundColor: "#04070d",
     show: false,
     title: "Riley",
+    icon: require("fs").existsSync(IKON) ? IKON : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -104,7 +110,9 @@ function createWindow() {
     },
   });
 
-  win.once("ready-to-show", () => win.show());
+  win.once("ready-to-show", () => {
+    if (!tepsideBasla) win.show();
+  });
 
   win.on("close", (event) => {
     // Kapatma düğmesi pencereyi tepsiye gizler; çıkış tepsi menüsünden
@@ -118,16 +126,29 @@ function createWindow() {
 }
 
 function createTray() {
-  // Basit tek renk simge (harici dosya gerekmesin diye gömülü)
-  const icon = nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAe0lEQVR42mNkQAX/GfAARhwK/uNTxIhLAS7FjLgU4FLMhEsBLsVMuBTgUsyESwEuxUy4FOBSzIRLAS7FTLgU4FLMhEsBLsVMuBTgUsyESwEuxUy4FOBSzIRLAS7FTLgU4FLMhEsBLsVMuBTgUsyESwEuxUy4FOBSDABPzBQRVeGCsQAAAABJRU5ErkJggg=="
-  );
+  if (tray) { tray.destroy(); tray = null; }
+  const icon = require("fs").existsSync(IKON)
+    ? nativeImage.createFromPath(IKON)
+    : nativeImage.createEmpty();
   tray = new Tray(icon);
   tray.setToolTip("Riley");
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Riley'yi göster", click: () => win && win.show() },
       { label: "Dinlemeyi başlat", click: () => win && win.webContents.send("trigger-listen") },
+      { type: "separator" },
+      {
+        label: "Windows ile başlat",
+        type: "checkbox",
+        checked: app.getLoginItemSettings().openAtLogin,
+        click: (menu) => {
+          app.setLoginItemSettings({
+            openAtLogin: menu.checked,
+            args: ["--tray"],
+          });
+          createTray();          // menüyü yeni duruma göre yeniden kur
+        },
+      },
       { type: "separator" },
       { label: "Çıkış", click: () => { quitting = true; app.quit(); } },
     ])

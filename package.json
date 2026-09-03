@@ -23,6 +23,7 @@
     "files": [
       "desktop/**",
       "frontend/**",
+      "build/icon.ico",
       "package.json"
     ],
     "win": {
@@ -34,7 +35,8 @@
           ]
         }
       ],
-      "artifactName": "Riley.exe"
+      "artifactName": "Riley.exe",
+      "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "Riley.exe",

@@ -106,6 +106,14 @@ powershell -ExecutionPolicy Bypass -File scripts\kurulum.ps1 -Model qwen3:4b
 .\baslat.ps1 -Sessiz       # mikrofon kapalı, yalnızca yazarak
 ```
 
+### Açılış ve kısayol
+
+Masaüstündeki `Riley` kısayoluna atanmış **Ctrl + Alt + R** ile uygulama kapalıyken
+bile açılır. Açıkken aynı tuş Riley'yi dinlemeye geçirir.
+
+Windows ile birlikte başlatmak için tepsi simgesine sağ tıklayıp **Windows ile
+başlat** seçeneğini işaretleyin; Riley açılışta pencere açmadan tepsiye yerleşir.
+
 **Konuşmak için üç yol var:**
 
 1. **Adıyla seslenin** — "Riley, hava nasıl?" (mikrofon sürekli dinler ama

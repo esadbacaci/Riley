@@ -26,3 +26,5 @@ data/memory.json
 data/logs/
 data/captures/
 .env
+
+# Uretilen ikon derleme ciktisi disinda tutulmaz; kaynak betik repoda
