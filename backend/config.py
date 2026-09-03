@@ -33,37 +33,40 @@ class LLMConfig:
 
 @dataclass
 class STTConfig:
-    # tiny | base | small | medium | deepdml/faster-whisper-large-v3-turbo-ct2
-    # "small" hız/doğruluk dengesi; turbo daha doğru ama ~1 GB fazla bellek
-    # ister ve iki kat yavaştır.
-    model_size: str = "small"
-    # RTX 5060 (Blackwell) için CTranslate2 CUDA desteği henüz oturmadı;
-    # "auto" önce GPU dener, hata alırsa CPU'ya düşer.
+    # Ölçülen çok dilli kelime hata oranı: small ~%7, large-v3-turbo ~%3.7.
+    # Yani turbo hataların yaklaşık yarısını siliyor ve fark, Türkçe gibi
+    # kaynağı az dillerde daha da açılıyor. Bedeli ~1 GB fazla bellek ve
+    # çözümleme başına birkaç yüz milisaniye; buna değer.
+    # Bellek dar gelirse "small" hâlâ seçilebilir.
+    model_size: str = "deepdml/faster-whisper-large-v3-turbo-ct2"
+    # "auto" önce GPU dener, hata alırsa işlemciye düşer.
     device: str = "auto"
     compute_type_gpu: str = "float16"
     compute_type_cpu: str = "int8"
     language: str = "tr"
     beam_size: int = 5                 # 1 en hızlı, 5 belirgin daha doğru
-    vad_aggressiveness: int = 2        # 0-3, yüksek = daha agresif sessizlik kesme
-    # Konuşma sonu tespiti. Kısa söylemlerde insan duraklayabilir, bu yüzden
-    # daha sabırlı; uzun bir cümle bittiyse beklemeye gerek yok.
-    silence_ms: int = 750              # varsayılan bekleme
-    kisa_sessizlik_ms: int = 450       # uzun söylemden sonra bu kadar yeter
-    uzun_soylem_ms: int = 1500         # bu kadar konuşulduysa "uzun" sayılır
+    # Konuşma tespiti. "silero" küçük bir sinir ağı ve klavye/fan gibi
+    # sesleri konuşma sanmıyor; webrtcvad ham genliğe baktığı için hem
+    # yanlış tetikleniyor hem kısık konuşmayı kaçırıyordu.
+    vad_yontemi: str = "auto"          # auto | silero | webrtcvad | enerji
+    vad_esigi: float = 0.5             # silero konuşma olasılığı eşiği
+    vad_aggressiveness: int = 2        # yalnızca webrtcvad için, 0-3
+    # Konuşma sonu tespiti. Bu eşikler gecikme uğruna fazla kısaltılmıştı ve
+    # cümle ortasındaki normal duraklamalarda kullanıcının sözü kesiliyordu;
+    # yarım cümle Whisper'a gidince de "beni anlamıyor" hissi doğuyordu.
+    # İnsanlar konuşurken 300-600 ms rahat duraklar, eşikler bunun üstünde.
+    silence_ms: int = 850              # varsayılan bekleme
+    kisa_sessizlik_ms: int = 700       # uzun söylemden sonra bu kadar yeter
+    uzun_soylem_ms: int = 2000         # bu kadar konuşulduysa "uzun" sayılır
     max_utterance_s: float = 20.0
     min_utterance_ms: int = 350
-    # Whisper "Riley" gibi yabancı bir adı Türkçe konuşma içinde tanıyamaz;
-    # bu iki ipucu birlikte verildiğinde adı doğru yazıyor.
+    # Whisper "Riley" gibi yabancı bir adı Türkçe konuşma içinde zor tanır.
+    # Kısa bir ön metin yardımcı oluyor. Uzun ipucu listesi denendi ve
+    # geri tepti: büyük model listeyi cevabın içine kusuyordu
+    # ("Google Chrome, aç, kapat, ekran görüntüsü, ses, yüzde..."). Bu yüzden
+    # ipuçları kısa tutuluyor ve çıktı sızıntıya karşı ayrıca süzülüyor.
     initial_prompt: str = "Riley'e sesleniyorum."
-    # Sık geçen uygulama adları ve komut sözcükleri modele ipucu olarak
-    # verilir; bunlar olmadan "Chrome" gibi yabancı adlar sık yanlış yazılıyor.
-    hotwords: str = (
-        "Riley, Google Chrome, Spotify, YouTube, Discord, Steam, Firefox, "
-        "WhatsApp, Telegram, Netflix, Visual Studio Code, Excel, Word, "
-        "not defteri, hesap makinesi, dosya gezgini, "
-        "aç, kapat, başlat, ekran görüntüsü, ses, yüzde, dosya, klasör, "
-        "masaüstü, belgeler, indirilenler, hatırlat, ara, çal, duraklat, kilitle"
-    )
+    hotwords: str = "Riley"
     # Halüsinasyon süzgeci: bu eşiklerin dışındaki çözümlemeler atılır
     no_speech_max: float = 0.6     # konuşma yokluğu olasılığı üst sınırı
     min_logprob: float = -1.0      # ortalama güven alt sınırı
@@ -96,17 +99,27 @@ class WakeConfig:
     threshold: float = 0.55
     cooldown_s: float = 1.5
     # --- söz kesme ---
-    # Riley konuşurken mikrofon kendi sesini de duyar. İlk yarım saniyede
-    # bu yankının seviyesi ölçülüp taban kabul edilir; sesin tabanı belirgin
-    # şekilde aşması gerçek bir konuşma demektir.
-    barge_in: bool = True
-    barge_in_taban_ms: int = 500       # yankı tabanı bu sürede ölçülür
-    barge_in_kat: float = 3.0          # taban kaç kat aşılırsa söz kesilir
-    # Mutlak alt sınır yalnızca "neredeyse sessizlik" durumunu eler.
-    # Asıl korumayı ortam gürültüsüne uyum sağlayan taban sağlar; böylece
-    # kısık mikrofonlarda da gürültülü odalarda da doğru çalışır.
-    barge_in_asgari: float = 0.006
+    # HOPARLÖRDE VARSAYILAN OLARAK KAPALI.
+    # Riley konuşurken mikrofon kendi sesini de duyar. Akustik yankı
+    # bastırma olmadan "bu Riley'nin sesi mi, kullanıcının sesi mi"
+    # sorusunu yalnızca ses seviyesine bakarak güvenilir biçimde
+    # ayırt etmek mümkün değil: Riley kendi sesini araya giren biri
+    # sanıp kendini kesiyor, sonra kendi sesini komut olarak işleyip
+    # döngüye giriyor.
+    #
+    # Kulaklık kullanıyorsan mikrofon Riley'yi duymaz ve bu özellik
+    # sorunsuz çalışır; ayarlardan ya da buradan açabilirsin.
+    # Kapalıyken Esc, DUR düğmesi ve "dur" komutu her zaman çalışır.
+    barge_in: bool = False
+    barge_in_taban_ms: int = 1200      # konuşmanın ilk bu kadarı ölçüme ayrılır
+    barge_in_kat: float = 3.5          # yankı tabanı kaç kat aşılırsa kesilir
+    # Mutlak alt sınır: hoparlör yankısının bunun altında kalması beklenir.
+    # Fazla düşük tutulursa Riley kendi sesiyle tetiklenir.
+    barge_in_asgari: float = 0.030
     barge_in_ortam_kat: float = 8.0    # ölçülen ortam gürültüsünün kaç katı
+    # Riley sustuktan sonra mikrofonun sağır kalacağı süre. Odadaki yankı
+    # ve konuşmanın kuyruğu komut sanılmasın diye.
+    konusma_sonrasi_sagirlik_ms: int = 450
     barge_in_cerceve: int = 6          # üst üste kaç çerçeve (yaklaşık 180 ms)
     # Riley cevabını bitirdikten sonra kaç saniye boyunca adı söylemeden
     # konuşmaya devam edilebilir
@@ -119,7 +132,8 @@ class AudioConfig:
     input_device: int | None = None    # None = sistem varsayılanı
     output_device: int | None = None
     sample_rate: int = 16000           # STT ve wake word bu hızda çalışır
-    block_ms: int = 30                 # webrtcvad 10/20/30 ms kabul eder
+    # Silero VAD 16 kHz'de 512 örneklik pencere ister; 32 ms tam denk gelir.
+    block_ms: int = 32
 
 
 @dataclass
@@ -150,6 +164,38 @@ class PersonaConfig:
     style: str = "cinematic"
 
 
+# settings.json bütün ayarları kaydettiği için, bir varsayılanı sonradan
+# iyileştirdiğimizde eski dosya onu maskeliyor. Sürüm numarası artınca
+# GECISLER'de sayılan alanlar diskten değil koddan alınır.
+AYAR_SURUMU = 4
+
+GECISLER: dict[int, list[str]] = {
+    # Söz kesme eşikleri fazla hassastı: Riley kendi sesini araya giren
+    # biri sanıp kendini kesiyor, sonra kendi cevabını komut olarak işleyip
+    # döngüye giriyordu. Bu alanlar yeni varsayılanlara döndürülür.
+    2: [
+        "wake.barge_in",
+        "wake.barge_in_taban_ms",
+        "wake.barge_in_kat",
+        "wake.barge_in_asgari",
+        "wake.barge_in_cerceve",
+    ],
+    # Konuşma sonu eşikleri gecikme uğruna fazla kısaltılmıştı ve cümle
+    # ortasındaki duraklamalarda kullanıcının sözü kesiliyordu.
+    3: [
+        "stt.silence_ms",
+        "stt.kisa_sessizlik_ms",
+        "stt.uzun_soylem_ms",
+    ],
+    # Ses tanıma modeli turbo'ya geçti (hataların yarısı), konuşma tespiti
+    # Silero'ya geçti ve onun istediği pencere 32 ms.
+    4: [
+        "stt.model_size",
+        "audio.block_ms",
+    ],
+}
+
+
 @dataclass
 class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -160,11 +206,13 @@ class Config:
     perms: PermissionConfig = field(default_factory=PermissionConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     persona: PersonaConfig = field(default_factory=PersonaConfig)
+    ayar_surumu: int = AYAR_SURUMU
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     def save(self) -> None:
+        self.ayar_surumu = AYAR_SURUMU
         USER_SETTINGS.write_text(
             json.dumps(self.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
         )
@@ -180,11 +228,35 @@ def _merge(dc, data: dict):
                 setattr(dc, key, value)
 
 
+def _eski_alanlari_ayikla(data: dict) -> list[str]:
+    """Kaydedilmiş ayarlardan, artık koddaki değeri geçerli olanları siler."""
+    kayitli_surum = int(data.get("ayar_surumu", 1))
+    if kayitli_surum >= AYAR_SURUMU:
+        return []
+
+    silinen = []
+    for surum in range(kayitli_surum + 1, AYAR_SURUMU + 1):
+        for yol in GECISLER.get(surum, []):
+            bolum, _, alan = yol.partition(".")
+            if isinstance(data.get(bolum), dict) and alan in data[bolum]:
+                data[bolum].pop(alan)
+                silinen.append(yol)
+    return silinen
+
+
 def load() -> Config:
     cfg = Config()
     if USER_SETTINGS.exists():
         try:
-            _merge(cfg, json.loads(USER_SETTINGS.read_text(encoding="utf-8")))
+            kayitli = json.loads(USER_SETTINGS.read_text(encoding="utf-8"))
+            silinen = _eski_alanlari_ayikla(kayitli)
+            _merge(cfg, kayitli)
+            if silinen:
+                cfg.save()      # sürümü yükselt, bir daha uygulanmasın
+                print(
+                    "[config] güvenli varsayılanlara döndürülen ayarlar: "
+                    + ", ".join(silinen)
+                )
         except Exception as exc:  # bozuk dosya kullanıcıyı kilitlemesin
             print(f"[config] settings.json okunamadı, varsayılanlar kullanılıyor: {exc}")
     # Ortam değişkeni her şeyi ezer (hızlı deneme için)

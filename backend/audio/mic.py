@@ -3,7 +3,7 @@ tespiti ve metne çevirme.
 
 Tek bir ses akışı vardır ve şu sırayla işler:
 
-  1. webrtcvad ile konuşma parçaları ayıklanır (sessizlik = cümle bitti).
+  1. Silero VAD ile konuşma parçaları ayıklanır (sessizlik = cümle bitti).
   2. Parça Whisper'a verilir.
   3. Riley uykudaysa metnin başında adı aranır: "Riley, sesi kıs".
      Adı varsa ad ayıklanır, kalanı komut olarak işlenir.
@@ -25,6 +25,7 @@ import numpy as np
 
 from audio.duzeltme import duzelt
 from audio.stt import is_noise, transcriber
+from audio.vad import KonusmaTespiti
 from config import CFG, MODELS_DIR
 from core.bus import bus
 from core.state import State, machine
@@ -74,6 +75,29 @@ def ad_kalibi() -> re.Pattern:
     if _AD_KALIBI is None:
         _AD_KALIBI = _ad_kalibi_uret()
     return _AD_KALIBI
+
+
+# Söz kesmenin gerçekten kullanıcıdan geldiğini gösteren işaretler
+_KESME_SOZCUKLERI = {
+    "dur", "sus", "kes", "bekle", "yeter", "tamam", "iptal", "hayir", "yok",
+    "dinle", "pardon", "affedersin",
+}
+
+
+def _bize_soylenmis(text: str) -> bool:
+    """Metin gerçekten Riley'ye söylenmiş gibi mi duruyor?
+
+    Söz kesme yalnızca ses seviyesine bakarak tetikleniyor ve yanlış
+    tetiklenebiliyor. Kesmeyle yakalanan sesi komut saymadan önce, içinde
+    Riley'nin adının ya da bir durdurma sözcüğünün geçtiğini isteriz.
+    """
+    if not text:
+        return False
+    if ad_kalibi().match(text.lower()):
+        return True
+
+    ilk_sozcukler = re.findall(r"[a-zçğıöşü]+", _fold(text))[:4]
+    return any(s in _KESME_SOZCUKLERI for s in ilk_sozcukler)
 
 
 class WakeWord:
@@ -180,13 +204,16 @@ class Listener:
         self._eko_ornekleri: list[float] = []
         self._eko_taban = 0.0
         self._yuksek_ardisik = 0
+        self._konusma_basi = 0.0
+        self._kesme_ile_basladi = False
+        # Riley sustuktan sonra mikrofonun sağır kalacağı ana kadar
+        self._sagirlik_bitis = 0.0
 
     # --- kurulum ----------------------------------------------------------
     def start(self) -> None:
         import sounddevice as sd
-        import webrtcvad
 
-        self.vad = webrtcvad.Vad(CFG.stt.vad_aggressiveness)
+        self.vad = KonusmaTespiti()
         self.wake.load()
 
         def callback(indata, frames, time_info, status):
@@ -210,7 +237,11 @@ class Listener:
         self._worker.start()
 
         nasil = CFG.wake.model if self.wake.ready else f"\"{CFG.persona.name}\" de"
-        bus.log_threadsafe(f"Mikrofon dinlemede — uyandırma: {nasil}", "info")
+        bus.log_threadsafe(
+            f"Mikrofon dinlemede — uyandırma: {nasil}, konuşma tespiti: "
+            f"{self.vad.yontem}",
+            "info",
+        )
 
     def stop(self) -> None:
         self._running.clear()
@@ -250,6 +281,17 @@ class Listener:
             # araya girerse susmalı.
             if speaker.is_speaking:
                 self._konusurken(frame, speaker)
+                # Riley sustuğu anda odada hâlâ sesinin yankısı var; kısa
+                # bir süre sağır kal ki kendi kuyruğunu komut sanmasın.
+                self._sagirlik_bitis = (
+                    time.time() + CFG.wake.konusma_sonrasi_sagirlik_ms / 1000
+                )
+                continue
+
+            # Konuşma yeni bitti: yankı sönene kadar hiçbir şey yakalama
+            if time.time() < self._sagirlik_bitis:
+                self._konusuyordu = False
+                self._preroll.clear()
                 continue
 
             if not self._capturing:
@@ -265,11 +307,16 @@ class Listener:
     def _konusurken(self, frame: np.ndarray, speaker) -> None:
         """Riley konuşurken çalışır; kullanıcı araya girerse sözünü keser.
 
-        Mikrofon Riley'nin kendi sesini de duyar. İlk yarım saniyede bu
-        yankının seviyesi ölçülüp taban kabul edilir. Sonrasında sesin
-        tabanı belirgin şekilde ve üst üste birkaç çerçeve boyunca aşması
-        gerçek bir konuşma sayılır. Kulaklık takılıysa yankı zaten yok
-        olduğu için mutlak alt sınır devreye girer.
+        Mikrofon Riley'nin kendi sesini de duyar, bu yüzden "bu ses kimin"
+        sorusunu ayırt etmek gerekiyor. Yankı tabanı konuşmanın tamamı
+        boyunca ölçülür: ilk yarım saniyeye bakmak yanlıştı, çünkü Piper
+        sessizlikle başlıyor ve taban sıfıra yakın çıkıp Riley'nin kendi
+        sesi eşiği aşıyordu.
+
+        Taban, o ana kadar duyulan seviyelerin yüksek yüzdeliği olarak
+        alınır; yani Riley'nin normal konuşma gürlüğünü temsil eder.
+        Kullanıcı mikrofona yakın konuştuğu için bunu belirgin biçimde
+        aşar.
         """
         # Hazır akustik model varsa onunla uyanmak daha güvenilir
         if self.wake.ready and self.wake.feed(frame) >= CFG.wake.threshold:
@@ -284,17 +331,21 @@ class Listener:
             self._eko_ornekleri = []
             self._eko_taban = 0.0
             self._yuksek_ardisik = 0
+            self._konusma_basi = time.time()
 
         rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))) / 32768.0
+        self._eko_ornekleri.append(rms)
+        if len(self._eko_ornekleri) > 400:          # ~12 saniyelik pencere
+            self._eko_ornekleri.pop(0)
 
-        taban_cerceve = max(4, CFG.wake.barge_in_taban_ms // FRAME_MS)
-        if len(self._eko_ornekleri) < taban_cerceve:
-            self._eko_ornekleri.append(rms)
-            if len(self._eko_ornekleri) == taban_cerceve:
-                sirali = sorted(self._eko_ornekleri)
-                # Ortanca: tek tük yüksek çerçeveler tabanı bozmasın
-                self._eko_taban = sirali[len(sirali) // 2]
+        # Konuşmanın başında henüz Riley'nin gürlüğünü bilmiyoruz; bu süre
+        # boyunca yalnızca dinleyip ölçüyoruz.
+        gecen_ms = (time.time() - self._konusma_basi) * 1000
+        if gecen_ms < CFG.wake.barge_in_taban_ms:
             return
+
+        sirali = sorted(self._eko_ornekleri)
+        self._eko_taban = sirali[int(len(sirali) * 0.8)]     # yüksek yüzdelik
 
         # Eşik üç kısıttan en büyüğü: yankının katı, ortam gürültüsünün katı
         # ve mutlak alt sınır.
@@ -315,6 +366,9 @@ class Listener:
         speaker.stop()
         self._konusuyordu = False
         self._yuksek_ardisik = 0
+        # Kesme yanlış tetiklenmiş olabilir; yakalanan sesin gerçekten bize
+        # söylenmiş olduğunu _end_capture doğrulayacak.
+        self._kesme_ile_basladi = True
         # Sunucu tarafı ajanı da iptal etsin, yoksa kalan cümleler kuyruğa
         # eklenip Riley konuşmaya devam eder.
         bus.emit_threadsafe("barge.in", reason=sebep)
@@ -352,10 +406,7 @@ class Listener:
             machine.set_threadsafe(State.LISTENING, kaynak)
 
     def _consume(self, frame: np.ndarray) -> None:
-        try:
-            is_speech = self.vad.is_speech(frame.tobytes(), SR)
-        except Exception:
-            is_speech = bool(np.abs(frame).mean() > 400)
+        is_speech = self.vad.konusma_mi(frame)
 
         if not self._capturing:
             if not is_speech:
@@ -390,8 +441,12 @@ class Listener:
     def _end_capture(self, transcribe: bool) -> None:
         chunks, self._speech = self._speech, []
         self._capturing = False
+        if self.vad is not None:
+            self.vad.sifirla()      # sonraki söylem temiz durumla başlasın
         armed = self._armed
         self._forced = False
+        kesme_ile = self._kesme_ile_basladi
+        self._kesme_ile_basladi = False
 
         if not transcribe or not chunks:
             machine.set_threadsafe(State.IDLE)
@@ -417,6 +472,18 @@ class Listener:
         # Yabancı uygulama adları sık yanlış yazılıyor; komuta çevirmeden
         # önce bilinen adlara göre düzelt.
         text = duzelt(text)
+
+        # Söz kesme yanlış tetiklenmiş olabilir: Riley kendi sesini duymuş
+        # olabilir. Kesmeyle başlayan bir yakalamayı ancak gerçekten bize
+        # söylendiğine dair bir işaret varsa komut sayarız; yoksa yalnızca
+        # susmuş oluruz. Bu, Riley'nin kendi cevabını komut sanıp döngüye
+        # girmesini engelliyor.
+        if kesme_ile and not _bize_soylenmis(text):
+            bus.log_threadsafe(
+                f"(söz kesme doğrulanmadı, yok sayıldı) {text[:60]}", "debug"
+            )
+            machine.set_threadsafe(State.IDLE)
+            return
 
         komut = self._komuta_cevir(text, armed)
         if komut is None:

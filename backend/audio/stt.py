@@ -171,6 +171,11 @@ class Transcriber:
 
         parcalar: list[str] = []
         for seg in segments:
+            # Model bazen kendisine verilen ipucunu cevabın içine kusuyor.
+            # İpucu ayıklanır; geriye gerçek bir söz kalmadıysa parça atılır.
+            temiz = _ipucunu_ayikla(seg.text)
+            if not temiz:
+                continue
             # Whisper sessizlikte veya gürültüde uydurma cümleler üretir.
             # Bu iki ölçü, üretilen metnin gerçekten duyulmuş olup olmadığını
             # gösterir: konuşma yokluğu olasılığı ve ortalama güven.
@@ -178,7 +183,7 @@ class Transcriber:
                 continue
             if getattr(seg, "avg_logprob", 0.0) < CFG.stt.min_logprob:
                 continue
-            parcalar.append(seg.text.strip())
+            parcalar.append(temiz)
 
         return " ".join(parcalar).strip()
 
@@ -223,6 +228,28 @@ HALLUCINATION_PARCALARI = (
     "altyazi m",
     "merhaba turkler",
 )
+
+
+def _ipucunu_ayikla(text: str) -> str:
+    """Modele verilen ipucu çıktıya sızdıysa temizler.
+
+    Büyük modeller initial_prompt ve hotwords metnini bazen cevabın içine
+    kopyalıyor. İpucu çıkarılır, geriye kalan gerçek söz döndürülür.
+    """
+    if not text:
+        return ""
+
+    temiz = text.strip()
+    for ipucu in (CFG.stt.initial_prompt, CFG.stt.hotwords):
+        ipucu = (ipucu or "").strip()
+        if len(ipucu) < 8:
+            continue
+        yer = temiz.lower().find(ipucu.lower())
+        while yer != -1:
+            temiz = (temiz[:yer] + " " + temiz[yer + len(ipucu):]).strip()
+            yer = temiz.lower().find(ipucu.lower())
+
+    return temiz.strip(" ,.;:")
 
 
 def is_noise(text: str) -> bool:

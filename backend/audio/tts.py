@@ -30,95 +30,115 @@ class TTSUnavailable(RuntimeError):
 
 
 class PiperEngine:
-    """Piper'i alt süreç olarak çalıştırıp ham PCM'i hoparlöre akıtır."""
+    """Piper'i süreç içinde çalıştırır ve sesi üretildikçe hoparlöre akıtır.
+
+    Önceki sürüm her cümle için ayrı bir piper.exe süreci başlatıyordu.
+    Ölçüldüğünde her seferinde ~240 ms model yükleme bedeli çıkıyor, üstelik
+    cümleler arasında da boşluk oluşuyordu: metin ekranda görünüyor ama
+    sesi gecikiyordu.
+
+    Artık ses modeli bir kez belleğe alınıyor ve hoparlör akışı sürekli
+    açık kalıyor. Piper sesi parça parça ürettiği için ilk parça hazır olur
+    olmaz çalmaya başlıyoruz; cümlenin tamamının üretilmesini beklemiyoruz.
+    """
 
     def __init__(self, voice: str) -> None:
         self.voice = voice
         self.model_path = VOICE_DIR / f"{voice}.onnx"
         self.config_path = VOICE_DIR / f"{voice}.onnx.json"
 
-        if not PIPER_EXE.exists():
-            raise TTSUnavailable(f"Piper bulunamadı: {PIPER_EXE}")
         if not self.model_path.exists():
             raise TTSUnavailable(f"Ses modeli bulunamadı: {self.model_path}")
 
-        self.sample_rate = 22050
-        if self.config_path.exists():
-            try:
-                cfg = json.loads(self.config_path.read_text(encoding="utf-8"))
-                self.sample_rate = int(cfg.get("audio", {}).get("sample_rate", 22050))
-            except Exception:
-                pass
+        try:
+            from piper import PiperVoice
+        except ImportError as exc:
+            raise TTSUnavailable(
+                "piper-tts paketi kurulu değil (pip install piper-tts)"
+            ) from exc
 
-        self._proc: subprocess.Popen | None = None
+        try:
+            self._voice = PiperVoice.load(
+                str(self.model_path),
+                config_path=str(self.config_path) if self.config_path.exists() else None,
+            )
+        except Exception as exc:
+            raise TTSUnavailable(f"Ses modeli yüklenemedi: {exc}") from exc
+
+        self.sample_rate = int(getattr(self._voice.config, "sample_rate", 22050))
+
         self._stop = threading.Event()
+        self._stream = None
+        self._stream_lock = threading.Lock()
+
+    # --- hoparlör akışı ---------------------------------------------------
+    def _akis(self):
+        """Sürekli açık kalan çıkış akışı; cümleler arası boşluğu önler."""
+        import sounddevice as sd
+
+        with self._stream_lock:
+            if self._stream is None:
+                self._stream = sd.RawOutputStream(
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    dtype="int16",
+                    blocksize=0,          # sürücü kendi seçsin, daha az takılma
+                    device=CFG.audio.output_device,
+                )
+                self._stream.start()
+            return self._stream
+
+    def _akisi_kapat(self) -> None:
+        with self._stream_lock:
+            if self._stream is not None:
+                try:
+                    self._stream.abort()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
 
     def stop(self) -> None:
         self._stop.set()
-        proc = self._proc
-        if proc and proc.poll() is None:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+        # abort(): kuyrukta bekleyen sesi de at, yoksa durdurduktan sonra
+        # birkaç yüz milisaniye daha konuşmaya devam ediyor.
+        self._akisi_kapat()
+
+    def isit(self) -> None:
+        """İlk cümlenin gecikmemesi için modeli önden çalıştırır."""
+        try:
+            for _ in self._voice.synthesize("hazır", self._ayar()):
+                break
+        except Exception:
+            pass
+
+    def _ayar(self):
+        from piper.config import SynthesisConfig
+
+        return SynthesisConfig(
+            length_scale=max(0.5, min(2.0, CFG.tts.speed)),
+            noise_scale=CFG.tts.noise_scale,
+            noise_w_scale=CFG.tts.noise_w,
+            normalize_audio=True,
+        )
 
     def speak(self, text: str) -> None:
-        import sounddevice as sd
-
         self._stop.clear()
-        length_scale = max(0.5, min(2.0, CFG.tts.speed))
-
-        cmd = [
-            str(PIPER_EXE),
-            "--model", str(self.model_path),
-            "--output-raw",
-            "--length_scale", str(length_scale),
-            "--sentence_silence", str(CFG.tts.sentence_silence),
-            "--noise_scale", str(CFG.tts.noise_scale),
-            "--noise_w", str(CFG.tts.noise_w),
-        ]
-
-        self._proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            cwd=str(PIPER_EXE.parent),
-            creationflags=_CREATE_NO_WINDOW,
-        )
-        proc = self._proc
+        akis = self._akis()
 
         try:
-            proc.stdin.write(text.encode("utf-8") + b"\n")
-            proc.stdin.flush()
-            proc.stdin.close()
-        except (BrokenPipeError, OSError):
-            return
-
-        stream = sd.RawOutputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="int16",
-            blocksize=1024,
-            device=CFG.audio.output_device,
-        )
-        stream.start()
-        try:
-            while not self._stop.is_set():
-                chunk = proc.stdout.read(2048)
-                if not chunk:
+            for parca in self._voice.synthesize(text, self._ayar()):
+                if self._stop.is_set():
                     break
-                stream.write(chunk)
-                _emit_level(chunk)
+                ham = parca.audio_int16_bytes
+                if not ham:
+                    continue
+                akis.write(ham)
+                _emit_level(ham)
+        except Exception as exc:
+            bus.log_threadsafe(f"Seslendirme hatası: {exc}", "error")
+            self._akisi_kapat()
         finally:
-            try:
-                stream.stop()
-                stream.close()
-            except Exception:
-                pass
-            if proc.poll() is None:
-                proc.kill()
-            self._proc = None
             bus.emit_threadsafe("audio.level", value=0.0, source="tts")
 
 
@@ -180,6 +200,7 @@ class Speaker:
         if CFG.tts.engine == "piper":
             try:
                 self.engine = PiperEngine(CFG.tts.voice)
+                self.engine.isit()          # ilk cümle beklemesin
                 self.engine_name = f"piper:{CFG.tts.voice}"
                 return self.engine_name
             except TTSUnavailable as exc:
