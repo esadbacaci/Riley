@@ -10,7 +10,7 @@ import json
 import re
 import time
 
-from brain.llm import OllamaError, llm
+from brain.llm import OllamaError, OllamaYenidenDene, llm
 from brain.persona import build_system_prompt
 from config import CFG
 from core.bus import bus
@@ -117,6 +117,24 @@ class Agent:
             machine.clear_cancel()
             try:
                 return await self._run(user_text)
+            except OllamaYenidenDene:
+                # Servis çökmüştü ve yeniden ayağa kaldırıldı; kullanıcıya
+                # hata göstermeden isteği bir kez daha dene. Model belleğe
+                # yeniden yükleneceği için bu bir dakikayı bulabilir, o yüzden
+                # sessizce bekletmek yerine haber ver.
+                await bus.log("Dil modeli servisi toparlandı, tekrar deneniyor.", "warn")
+                await self.speak(
+                    "Dil modelim yeniden başlatıldı, belleğe yükleniyor. "
+                    "Birazdan cevap vereceğim."
+                )
+                try:
+                    return await self._run(user_text)
+                except Exception as exc:
+                    await machine.set(State.ERROR, str(exc))
+                    mesaj = "Dil modeli yeniden başlatıldı ama cevap alamadım."
+                    await self.speak(mesaj)
+                    await bus.emit("reply.done", text=mesaj, error=True)
+                    return mesaj
             except OllamaError as exc:
                 await machine.set(State.ERROR, str(exc))
                 message = "Dil modeline ulaşamıyorum. Ollama servisi çalışıyor mu?"

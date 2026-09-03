@@ -34,11 +34,13 @@ hareket eden bir reaktör, canlı sistem göstergeleri, hangi aracı ne zaman
 | **Tamamen yerel** | Ses, metin ve model — hiçbiri makineden çıkmaz |
 | **Türkçe** | Türkçe konuşur, Türkçe anlar, Türkçe seslendirir |
 | **Adıyla uyanır** | "Riley, ..." demeniz yeter; kısayol tuşu da var |
-| **Gerçekten iş yapar** | 38 beceri: uygulama, pencere, dosya, ses, ekran, web, hatırlatıcı |
+| **Gerçekten iş yapar** | 47 beceri: uygulama, pencere, tarayıcı, dosya, ses, ekran, web, hatırlatıcı |
 | **Onay ister** | Silme, kapatma gibi geri alınamaz işlerde sorar |
 | **Hatırlar** | "Bunu unutma" dediğiniz şeyler oturumlar arası kalır |
 | **Sözü kesilebilir** | Konuşurken araya girin, susar ve sizi dinler |
 | **Hatırlatıcılar kalıcı** | Riley kapansa bile hatırlatmalar korunur |
+| **Kendini toparlar** | Ollama çökerse servisi kendi başlatıp devam eder |
+| **Sesle ayarlanır** | "Biraz daha hızlı konuş", "bana Esad de" |
 
 ## Nasıl çalışır
 
@@ -153,7 +155,7 @@ hiçbir ses dosyası içermez ve Riley'nin durumuna göre değişir.
 ## Beceriler
 
 <details>
-<summary><b>38 becerinin tam listesi</b></summary>
+<summary><b>47 becerinin tam listesi</b></summary>
 
 **Uygulamalar ve pencereler** — `open_app`, `close_app`, `list_windows`,
 `focus_window`, `get_active_window`, `snap_window`, `close_window`, `minimize_all`
@@ -166,6 +168,13 @@ hiçbir ses dosyası içermez ve Riley'nin durumuna göre değişir.
 `clipboard_read`, `clipboard_write`, `type_text`
 
 **Web** — `web_search`, `fetch_page`, `open_url`, `search_youtube`
+
+**Tarayıcı** — `browser_action` (yeni sekme, sekme değiştirme, geri/ileri,
+yenileme, geçmiş, indirilenler, gizli pencere, yakınlaştırma),
+`browser_open_tab`, `browser_search`, `browser_find_in_page`
+
+**Kendi ayarları** — `set_speech_speed`, `set_address`,
+`set_permission_level`, `set_follow_up_window`, `get_settings`
 
 **Zaman ve hafıza** — `get_datetime`, `set_timer`, `list_timers`, `cancel_timer`,
 `remember`, `recall`, `forget`

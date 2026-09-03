@@ -105,12 +105,10 @@ def snap_window(yon: str, title: str = "") -> str:
     if title:
         pencere = _bul(title)
         hedef_ad = pencere.title
-        try:
-            if pencere.isMinimized:
-                pencere.restore()
-            pencere.activate()
-        except Exception as exc:
-            raise SkillError(f"Pencere öne getirilemedi: {exc}") from exc
+        from skills.pencere_araci import one_getir
+
+        if not one_getir(pencere):
+            raise SkillError(f"'{hedef_ad}' penceresi öne getirilemedi.")
 
     pyautogui.hotkey(*tuslar)
     etiketler = {

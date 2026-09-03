@@ -268,6 +268,12 @@
         log("⏰ Hatırlatma: " + ev.label, "warn");
         break;
 
+      case "settings.changed":
+        // Riley kendi ayarını sesle değiştirdi; çekmeceyi güncel tut
+        log(`⚙ ${ev.field} → ${ev.value}`, "ok");
+        ayarlariYukle();
+        break;
+
       case "log":
         log(ev.text, ev.level === "info" ? "" : ev.level);
         break;

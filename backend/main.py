@@ -103,6 +103,7 @@ async def _boot() -> None:
 
     # 5) Kısayol tuşu, hatırlatıcılar ve telemetri
     _start_hotkey()
+    asyncio.create_task(_llm_gozcusu())
     try:
         from skills.misc import hatirlaticilari_geri_yukle
 
@@ -122,6 +123,49 @@ async def _warm_llm() -> None:
         await bus.log(f"{CFG.llm.model} belleğe yüklendi.", "debug")
     except Exception as exc:
         await bus.log(f"Model önceden yüklenemedi: {exc}", "warn")
+
+
+async def _llm_gozcusu() -> None:
+    """Ollama'yı düzenli yoklar; çökerse ayağa kaldırır.
+
+    Servis kapandığında Riley eskiden sonsuza kadar hata veriyordu. Artık
+    durum arayüzde anında görünüyor ve servis geri geldiğinde model yeniden
+    belleğe alınıp normale dönülüyor.
+    """
+    ayakta = True
+    while True:
+        await asyncio.sleep(15)
+        try:
+            simdi_ayakta = await llm.is_alive()
+        except Exception:
+            simdi_ayakta = False
+
+        if simdi_ayakta == ayakta:
+            continue
+
+        if not simdi_ayakta:
+            ayakta = False
+            await bus.emit(
+                "boot.step", step="llm", status="error",
+                detail="Ollama yanıt vermiyor, yeniden başlatılıyor",
+            )
+            await bus.log("Ollama yanıt vermiyor; servis başlatılıyor.", "error")
+            if await llm.servisi_baslat():
+                ayakta = True
+                await bus.emit(
+                    "boot.step", step="llm", status="ok", detail=CFG.llm.model
+                )
+                await bus.log("Ollama tekrar ayakta.", "info")
+                asyncio.create_task(_warm_llm())
+            else:
+                await bus.log(
+                    "Ollama başlatılamadı. Elle çalıştırın: ollama serve", "error"
+                )
+        else:
+            ayakta = True
+            await bus.emit("boot.step", step="llm", status="ok", detail=CFG.llm.model)
+            await bus.log("Ollama tekrar ayakta.", "info")
+            asyncio.create_task(_warm_llm())
 
 
 async def _telemetry_loop() -> None:
@@ -411,12 +455,16 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             message = await ws.receive_json()
             await _handle_ui_message(message)
     except WebSocketDisconnect:
-        pass
+        pass                      # arayüz kapandı, olağan durum
     except Exception as exc:
         await bus.log(f"WebSocket hatası: {exc}", "warn")
     finally:
         pump_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
+        # Bağlantı koptuğunda gönderim görevi de WebSocketDisconnect atar;
+        # bu olağan bir kapanış, yığın izi dökmesine gerek yok.
+        with contextlib.suppress(
+            asyncio.CancelledError, WebSocketDisconnect, RuntimeError
+        ):
             await pump_task
         bus.unsubscribe(queue)
 
