@@ -35,9 +35,10 @@ hareket eden bir reaktör, canlı sistem göstergeleri, hangi aracı ne zaman
 | **Türkçe** | Türkçe konuşur, Türkçe anlar, Türkçe seslendirir |
 | **Adıyla uyanır** | "Riley, ..." demeniz yeter; kısayol tuşu da var |
 | **Gerçekten iş yapar** | 33 beceri: uygulama, dosya, ses, ekran, web, hatırlatıcı |
-| **Sözü kesilebilir** | Konuşurken araya girebilirsiniz |
 | **Onay ister** | Silme, kapatma gibi geri alınamaz işlerde sorar |
 | **Hatırlar** | "Bunu unutma" dediğiniz şeyler oturumlar arası kalır |
+| **Sözü kesilebilir** | Konuşurken araya girin, susar ve sizi dinler |
+| **Hatırlatıcılar kalıcı** | Riley kapansa bile hatırlatmalar korunur |
 
 ## Nasıl çalışır
 
@@ -241,6 +242,16 @@ Ayarlar → Konuşma hızı. Küçük değer daha hızlı konuşur (0.80 varsay�
 Whisper'ın bilinen davranışı. Riley bunları süzer; kaçan bir kalıp olursa
 `backend/audio/stt.py` içindeki `HALLUCINATIONS` listesine ekleyin.
 </details>
+
+## Geliştirme
+
+```powershell
+python -m pytest tests/ -q
+```
+
+Testler model, mikrofon ya da ağ gerektirmez; sayı okuma, marka düzeltme,
+gürültü süzgeci, uyandırma kalıbı, söz kesme mantığı, hatırlatıcı kalıcılığı
+ve geçmiş özetleme saf mantık olarak sınanır.
 
 ## Proje yapısı
 

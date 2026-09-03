@@ -28,3 +28,5 @@ data/captures/
 .env
 
 # Uretilen ikon derleme ciktisi disinda tutulmaz; kaynak betik repoda
+data/timers.json
+.pytest_cache/

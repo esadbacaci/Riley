@@ -91,6 +91,15 @@ class WakeConfig:
     ])
     threshold: float = 0.55
     cooldown_s: float = 1.5
+    # --- söz kesme ---
+    # Riley konuşurken mikrofon kendi sesini de duyar. İlk yarım saniyede
+    # bu yankının seviyesi ölçülüp taban kabul edilir; sesin tabanı belirgin
+    # şekilde aşması gerçek bir konuşma demektir.
+    barge_in: bool = True
+    barge_in_taban_ms: int = 500       # yankı tabanı bu sürede ölçülür
+    barge_in_kat: float = 3.0          # taban kaç kat aşılırsa söz kesilir
+    barge_in_asgari: float = 0.02      # mutlak alt sınır (sessiz ortam için)
+    barge_in_cerceve: int = 6          # üst üste kaç çerçeve (yaklaşık 180 ms)
     # Riley cevabını bitirdikten sonra kaç saniye boyunca adı söylemeden
     # konuşmaya devam edilebilir
     follow_up_s: float = 8.0

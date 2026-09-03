@@ -171,6 +171,12 @@ class Listener:
         self._armed_until = 0.0   # bu ana kadar ad söylemeden konuşulabilir
         self._forced = False      # kısayol / arayüz ile zorla dinleme
 
+        # Söz kesme durumu
+        self._konusuyordu = False
+        self._eko_ornekleri: list[float] = []
+        self._eko_taban = 0.0
+        self._yuksek_ardisik = 0
+
     # --- kurulum ----------------------------------------------------------
     def start(self) -> None:
         import sounddevice as sd
@@ -236,14 +242,10 @@ class Listener:
 
             self._emit_level(frame)
 
-            # Riley konuşurken kendi sesini yazmasın. Sözü ancak hazır
-            # uyandırma modeli varsa kesilebilir.
+            # Riley konuşurken kendi sesini komut sanmamalı ama kullanıcı
+            # araya girerse susmalı.
             if speaker.is_speaking:
-                if self.wake.ready and self.wake.feed(frame) >= CFG.wake.threshold:
-                    speaker.stop()
-                    bus.emit_threadsafe("wake", score=1.0, barge_in=True)
-                    self._armed_until = time.time() + CFG.wake.follow_up_s
-                    self._begin_capture("söz kesme")
+                self._konusurken(frame, speaker)
                 continue
 
             if not self._capturing:
@@ -256,6 +258,60 @@ class Listener:
 
             self._consume(frame)
 
+    def _konusurken(self, frame: np.ndarray, speaker) -> None:
+        """Riley konuşurken çalışır; kullanıcı araya girerse sözünü keser.
+
+        Mikrofon Riley'nin kendi sesini de duyar. İlk yarım saniyede bu
+        yankının seviyesi ölçülüp taban kabul edilir. Sonrasında sesin
+        tabanı belirgin şekilde ve üst üste birkaç çerçeve boyunca aşması
+        gerçek bir konuşma sayılır. Kulaklık takılıysa yankı zaten yok
+        olduğu için mutlak alt sınır devreye girer.
+        """
+        # Hazır akustik model varsa onunla uyanmak daha güvenilir
+        if self.wake.ready and self.wake.feed(frame) >= CFG.wake.threshold:
+            self._sozu_kes(speaker, "uyandırma sözcüğü")
+            return
+
+        if not CFG.wake.barge_in:
+            return
+
+        if not self._konusuyordu:          # yeni konuşma başladı, sıfırla
+            self._konusuyordu = True
+            self._eko_ornekleri = []
+            self._eko_taban = 0.0
+            self._yuksek_ardisik = 0
+
+        rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))) / 32768.0
+
+        taban_cerceve = max(4, CFG.wake.barge_in_taban_ms // FRAME_MS)
+        if len(self._eko_ornekleri) < taban_cerceve:
+            self._eko_ornekleri.append(rms)
+            if len(self._eko_ornekleri) == taban_cerceve:
+                sirali = sorted(self._eko_ornekleri)
+                # Ortanca: tek tük yüksek çerçeveler tabanı bozmasın
+                self._eko_taban = sirali[len(sirali) // 2]
+            return
+
+        esik = max(self._eko_taban * CFG.wake.barge_in_kat, CFG.wake.barge_in_asgari)
+        if rms > esik:
+            self._yuksek_ardisik += 1
+            if self._yuksek_ardisik >= CFG.wake.barge_in_cerceve:
+                self._sozu_kes(speaker, "araya girildi")
+        else:
+            self._yuksek_ardisik = 0
+
+    def _sozu_kes(self, speaker, sebep: str) -> None:
+        """Konuşmayı anında durdurur ve dinlemeye geçer."""
+        speaker.stop()
+        self._konusuyordu = False
+        self._yuksek_ardisik = 0
+        # Sunucu tarafı ajanı da iptal etsin, yoksa kalan cümleler kuyruğa
+        # eklenip Riley konuşmaya devam eder.
+        bus.emit_threadsafe("barge.in", reason=sebep)
+        bus.emit_threadsafe("wake", score=1.0, barge_in=True)
+        self._armed_until = time.time() + CFG.wake.follow_up_s
+        self._begin_capture(sebep)
+
     def _emit_level(self, frame: np.ndarray) -> None:
         self._level_tick += 1
         if self._level_tick % 2:            # ~60 ms'de bir yeter
@@ -264,6 +320,7 @@ class Listener:
 
         if speaker.is_speaking:
             return                          # dalgayı TTS sürüyor
+        self._konusuyordu = False
         rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))) / 32768.0
         bus.emit_threadsafe(
             "audio.level", value=round(min(1.0, rms * 8.0), 3), source="mic"

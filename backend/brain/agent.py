@@ -57,9 +57,13 @@ def is_affirmative(text: str) -> bool | None:
 
 
 class Agent:
-    def __init__(self, max_history: int = 24) -> None:
+    def __init__(self, max_history: int = 24, tutulacak: int = 12) -> None:
         self.history: list[dict] = []
-        self.max_history = max_history
+        self.max_history = max_history      # bu sayıyı aşınca kırpılır
+        self.tutulacak = tutulacak          # kırpımdan sonra kalan mesaj sayısı
+        # Kırpılan eski mesajların sıkıştırılmış özeti. Uzun sohbetlerde
+        # bağlamın tamamen kaybolmasını engeller.
+        self.ozet: str = ""
         self.speech_queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._confirm_future: asyncio.Future[bool] | None = None
         self._busy = asyncio.Lock()
@@ -129,6 +133,15 @@ class Agent:
 
         memories = [m["fact"] for m in _load_memory()]
         messages = [{"role": "system", "content": build_system_prompt(memories)}]
+        if self.ozet:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "KONUŞMANIN ÖNCEKİ BÖLÜMÜNÜN ÖZETİ (bunu kendiliğinden "
+                    "tekrar etme, sadece gerektiğinde başvur):\n"
+                    f"{self.ozet}"
+                ),
+            })
         messages.extend(self.history)
         messages.append({"role": "user", "content": user_text})
 
@@ -226,10 +239,63 @@ class Agent:
 
         self.history.append({"role": "user", "content": user_text})
         self.history.append({"role": "assistant", "content": final_text})
-        self.history = self.history[-self.max_history:]
+
+        # Kırpma cevabı geciktirmesin; arka planda yapılır
+        if len(self.history) > self.max_history:
+            asyncio.create_task(self._gecmisi_kirp())
 
         await bus.emit("reply.done", text=final_text)
         return final_text
+
+    async def _gecmisi_kirp(self) -> None:
+        """Eski mesajları özete sıkıştırıp geçmişi kısaltır.
+
+        Sohbet uzadıkça en eski mesajlar düşürülür. Onları tamamen atmak
+        yerine dil modeline kısa bir özet çıkarttırıp saklarız; böylece
+        yarım saat önce söylenen bir şey unutulmaz.
+        """
+        if len(self.history) <= self.max_history:
+            return
+
+        dusen = self.history[: len(self.history) - self.tutulacak]
+        kalan = self.history[len(self.history) - self.tutulacak :]
+
+        dokum = "\n".join(
+            f"{'Kullanıcı' if m['role'] == 'user' else 'Riley'}: {m['content']}"
+            for m in dusen
+            if m.get("content") and m.get("role") in ("user", "assistant")
+        )
+        if not dokum.strip():
+            self.history = kalan
+            return
+
+        istem = (
+            "Aşağıda bir kullanıcı ile asistan arasındaki konuşmanın eski "
+            "bölümü var. Bunu en fazla altı cümlede özetle. Kullanıcının "
+            "kim olduğu, tercihleri, üzerinde çalışılan konular ve verilen "
+            "kararlar kalsın; gündelik ayrıntılar düşsün. Sadece özeti yaz.\n\n"
+            + (f"Daha önceki özet:\n{self.ozet}\n\n" if self.ozet else "")
+            + f"Konuşma:\n{dokum}"
+        )
+
+        try:
+            parcalar: list[str] = []
+            async for olay in llm.chat_stream(
+                [{"role": "user", "content": istem}], temperature=0.2
+            ):
+                if olay["kind"] == "done":
+                    parcalar.append(olay["content"])
+            yeni = "".join(parcalar).strip()
+            if yeni:
+                self.ozet = yeni
+                await bus.log(
+                    f"Sohbet geçmişi özetlendi ({len(dusen)} mesaj sıkıştırıldı).",
+                    "debug",
+                )
+        except Exception as exc:
+            await bus.log(f"Geçmiş özetlenemedi: {exc}", "warn")
+
+        self.history = kalan
 
     async def _hafizayi_guvenceye_al(
         self, user_text: str, kullanilan_araclar: set[str]
@@ -253,6 +319,7 @@ class Agent:
 
     def reset(self) -> None:
         self.history.clear()
+        self.ozet = ""
 
 
 def _describe(tool: str, args: dict) -> str:

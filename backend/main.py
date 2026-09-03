@@ -101,8 +101,14 @@ async def _boot() -> None:
                 "boot.step", step="mic", status="error", detail=str(exc)[:200]
             )
 
-    # 5) Kısayol tuşu ve telemetri
+    # 5) Kısayol tuşu, hatırlatıcılar ve telemetri
     _start_hotkey()
+    try:
+        from skills.misc import hatirlaticilari_geri_yukle
+
+        await hatirlaticilari_geri_yukle()
+    except Exception as exc:
+        await bus.log(f"Hatırlatıcılar geri yüklenemedi: {exc}", "warn")
     asyncio.create_task(_telemetry_loop())
 
     await machine.set(State.IDLE)
@@ -161,6 +167,26 @@ def _start_hotkey() -> None:
         bus.log_threadsafe(f"Kısayol aktif: {CFG.wake.hotkey}", "info")
     except Exception as exc:
         bus.log_threadsafe(f"Kısayol kurulamadı: {exc}", "warn")
+
+
+async def _on_barge_in(event: dict) -> None:
+    """Kullanıcı araya girdi: konuşmayı ve üretimi tamamen durdur.
+
+    Ses zaten mikrofon iş parçacığında kesildi; burada ajanın akışı iptal
+    edilir ve kuyrukta bekleyen cümleler atılır, yoksa Riley kaldığı yerden
+    konuşmaya devam eder.
+    """
+    machine.request_cancel()
+    atilan = 0
+    while not agent.speech_queue.empty():
+        try:
+            agent.speech_queue.get_nowait()
+            atilan += 1
+        except asyncio.QueueEmpty:
+            break
+    await bus.log(
+        f"Söz kesildi ({event.get('reason', '')}), {atilan} cümle atıldı.", "warn"
+    )
 
 
 async def _on_speech_end(event: dict) -> None:
@@ -398,6 +424,7 @@ async def on_startup() -> None:
     bus.bind_loop(asyncio.get_running_loop())
     bus.on("assistant.say", lambda e: agent.speak(e.get("text", "")))
     bus.on("speech.end", _on_speech_end)
+    bus.on("barge.in", _on_barge_in)
     _boot_task = asyncio.create_task(_boot())
 
 
