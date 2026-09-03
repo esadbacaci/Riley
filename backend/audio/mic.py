@@ -171,6 +171,10 @@ class Listener:
         self._armed_until = 0.0   # bu ana kadar ad söylemeden konuşulabilir
         self._forced = False      # kısayol / arayüz ile zorla dinleme
 
+        # Ortam gürültüsü kestirimi: Riley sussuz beklerken yavaşça güncellenir
+        # ve söz kesme eşiğinin tabanını belirler.
+        self._ortam_taban = 0.001
+
         # Söz kesme durumu
         self._konusuyordu = False
         self._eko_ornekleri: list[float] = []
@@ -292,7 +296,13 @@ class Listener:
                 self._eko_taban = sirali[len(sirali) // 2]
             return
 
-        esik = max(self._eko_taban * CFG.wake.barge_in_kat, CFG.wake.barge_in_asgari)
+        # Eşik üç kısıttan en büyüğü: yankının katı, ortam gürültüsünün katı
+        # ve mutlak alt sınır.
+        esik = max(
+            self._eko_taban * CFG.wake.barge_in_kat,
+            self._ortam_taban * CFG.wake.barge_in_ortam_kat,
+            CFG.wake.barge_in_asgari,
+        )
         if rms > esik:
             self._yuksek_ardisik += 1
             if self._yuksek_ardisik >= CFG.wake.barge_in_cerceve:
@@ -322,6 +332,13 @@ class Listener:
             return                          # dalgayı TTS sürüyor
         self._konusuyordu = False
         rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))) / 32768.0
+
+        # Konuşma yokken ortam gürültüsünü yavaşça öğren. Yükselişe hızlı,
+        # düşüşe yavaş tepki verir ki tek tük sesler tabanı şişirmesin.
+        if not self._capturing:
+            katsayi = 0.05 if rms < self._ortam_taban else 0.005
+            self._ortam_taban += (rms - self._ortam_taban) * katsayi
+
         bus.emit_threadsafe(
             "audio.level", value=round(min(1.0, rms * 8.0), 3), source="mic"
         )

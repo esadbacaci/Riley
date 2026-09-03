@@ -102,7 +102,11 @@ class WakeConfig:
     barge_in: bool = True
     barge_in_taban_ms: int = 500       # yankı tabanı bu sürede ölçülür
     barge_in_kat: float = 3.0          # taban kaç kat aşılırsa söz kesilir
-    barge_in_asgari: float = 0.02      # mutlak alt sınır (sessiz ortam için)
+    # Mutlak alt sınır yalnızca "neredeyse sessizlik" durumunu eler.
+    # Asıl korumayı ortam gürültüsüne uyum sağlayan taban sağlar; böylece
+    # kısık mikrofonlarda da gürültülü odalarda da doğru çalışır.
+    barge_in_asgari: float = 0.006
+    barge_in_ortam_kat: float = 8.0    # ölçülen ortam gürültüsünün kaç katı
     barge_in_cerceve: int = 6          # üst üste kaç çerçeve (yaklaşık 180 ms)
     # Riley cevabını bitirdikten sonra kaç saniye boyunca adı söylemeden
     # konuşmaya devam edilebilir
