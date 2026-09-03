@@ -346,6 +346,40 @@ async def get_memory() -> JSONResponse:
     return JSONResponse(_load_memory())
 
 
+def _sistem_durumu() -> dict[str, dict]:
+    """Dört alt sistemin o anki durumu; arayüzdeki listeyi besler."""
+    from audio.stt import transcriber
+    from audio.tts import speaker
+
+    durum: dict[str, dict] = {}
+
+    hazir = machine.current is not State.BOOTING
+    durum["llm"] = {
+        "status": "ok" if hazir else "start",
+        "detail": CFG.llm.model,
+    }
+    durum["stt"] = {
+        "status": "ok" if transcriber.model is not None else "start",
+        "detail": f"{CFG.stt.model_size}@{transcriber.device}",
+    }
+    durum["tts"] = {
+        "status": "ok" if speaker.engine is not None else "start",
+        "detail": speaker.engine_name,
+    }
+    if mikrofon_kapali():
+        durum["mic"] = {"status": "warn", "detail": "mikrofon kapalı"}
+    elif listener is not None:
+        durum["mic"] = {
+            "status": "ok",
+            "detail": CFG.wake.model if listener.wake.ready
+                      else f'"{CFG.persona.name}" de',
+        }
+    else:
+        durum["mic"] = {"status": "start", "detail": ""}
+
+    return durum
+
+
 # --------------------------------------------------------------- WebSocket --
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
@@ -359,6 +393,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         "model": CFG.llm.model,
         "hotkey": CFG.wake.hotkey,
         "skills": [s.name for s in available_skills()],
+        # Açılış olayları olay geçmişinden kaymış olabilir; arayüz sistem
+        # durumunu tekrar oynatmaya güvenmesin, anlık durumu alsın.
+        "systems": _sistem_durumu(),
     })
     for event in bus.replay()[-40:]:
         await ws.send_json(event)

@@ -253,8 +253,10 @@
           Süreyi Ayarlar'dan değiştirebilirsin.</p>
 
           <h3>Sözünü kesmek</h3>
-          <p>Riley konuşurken <kbd>Esc</kbd>'ye bas ya da <b>DUR</b> düğmesine
-          tıkla. Sesli olarak "dur", "sus" veya "yeter" de yeterli.</p>
+          <p><b>Konuşurken araya girebilirsin.</b> Riley anlatırken konuşmaya
+          başlarsan susar ve seni dinler; ayrıca bir tuşa basman gerekmez.</p>
+          <p>Tuşla kesmek istersen <kbd>Esc</kbd> ya da <b>DUR</b> düğmesi.
+          Sesli olarak "dur", "sus" veya "yeter" de yeterli.</p>
         </section>
 
         <section class="kbolum" id="k-komutlar">
@@ -280,8 +282,19 @@
             <b>Dosyalar</b>
             <code>Masaüstüne notlar.txt oluştur, içine alışveriş listesi yaz</code>
             <code>Masaüstünde rapor diye bir dosya var mı</code>
+            <code>İçinde fatura geçen dosya hangisiydi</code>
             <code>Belgeler klasöründe ne var</code>
             <code>notlar.txt dosyasını oku ve özetle</code>
+            <p class="ipucu">"Rapor diye bir dosya" dosya adında arar;
+            "içinde rapor geçen" dosyaların içeriğinde arar.</p>
+          </div>
+
+          <div class="kgrup">
+            <b>Pencereler</b>
+            <code>Şu an hangi pencere önde</code>
+            <code>Bu pencereyi sola yasla</code>
+            <code>Chrome'u öne getir</code>
+            <code>Masaüstünü göster</code>
           </div>
 
           <div class="kgrup">
@@ -379,9 +392,13 @@
             <b>Geniş</b> — her şey açık.</p>
           </div>
           <div class="kgrup">
-            <b>Dil modeli</b>
+            <b>Dil modeli ve ses tanıma modeli</b>
             <p>Ollama'da kurulu modeller arasından seçebilirsin. Büyük model
-            daha iyi anlar ama daha yavaştır ve daha çok bellek ister.</p>
+            daha iyi anlar ama daha yavaştır ve daha çok bellek ister.
+            Ses tanıma modelinde <b>Small</b> hız/doğruluk dengesi,
+            <b>Turbo</b> daha doğru ama iki kat yavaş.</p>
+            <p>Bu iki ayar yeniden başlatınca geçerli olur; ayarların altında
+            çıkan <b>Yeniden başlat</b> düğmesi bunu senin için yapar.</p>
           </div>
           <div class="kgrup">
             <b>Hatırlananlar</b>
@@ -428,8 +445,18 @@
             çoğunu süzer ve komut olarak işlemez; yok sayabilirsin.</p>
           </div>
 
+          <div class="kkart">
+            <b>Konuşurken araya girince susmuyor</b>
+            <p>Riley kendi sesini duymamak için mikrofondaki yankı seviyesini
+            ölçüp ona göre bir eşik belirler. Hoparlör çok yüksekse ya da sen
+            çok kısık konuşuyorsan bu eşiği aşamayabilirsin. Hoparlörü biraz
+            kısmak ya da kulaklık kullanmak kesin çözüm; <kbd>Esc</kbd> her
+            zaman çalışır.</p>
+          </div>
+
           <p class="ipucu">Kısayollar: <kbd>Boşluk</kbd> dinlemeyi başlatır ·
-          <kbd>Esc</kbd> susturur · <kbd>F1</kbd> bu kılavuzu açar</p>
+          <kbd>Esc</kbd> susturur · <kbd>F1</kbd> bu kılavuzu açar ·
+          <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> Riley'yi çağırır</p>
         </section>
       </div>
     </div>

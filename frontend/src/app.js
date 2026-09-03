@@ -160,6 +160,13 @@
           el.wakeHint.textContent = `veya "${ev.persona}, ..." diye seslen`;
         }
         setState(ev.state || "booting");
+        // Sayfa açılıştan sonra yenilenmişse boot.step olayları geçmişten
+        // kaymış olabilir; sistem listesini anlık durumdan doldur.
+        if (ev.systems) {
+          for (const [ad, bilgi] of Object.entries(ev.systems)) {
+            markSystem(ad, bilgi.status, bilgi.detail);
+          }
+        }
         break;
 
       case "state":
