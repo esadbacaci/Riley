@@ -7,6 +7,8 @@ import subprocess
 
 import psutil
 
+from pathlib import Path
+
 from config import DATA_DIR
 from skills.registry import SkillError, skill
 
@@ -145,7 +147,10 @@ def take_screenshot(monitor: int = 1) -> str:
     import mss
     import mss.tools
 
-    out_dir = DATA_DIR / "captures"
+    # Resimler klasörü, proje içindeki data klasöründen daha bulunabilir
+    out_dir = Path.home() / "Pictures" / "Riley"
+    if not out_dir.parent.exists():
+        out_dir = DATA_DIR / "captures"
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     path = out_dir / f"ekran_{stamp}.png"

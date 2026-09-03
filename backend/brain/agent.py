@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 
 from brain.llm import OllamaError, llm
 from brain.persona import build_system_prompt
@@ -20,6 +21,11 @@ from skills.misc import _load_memory
 # Cümle sonu: nokta/soru/ünlem + boşluk, ya da satır sonu
 _SENTENCE_END = re.compile(r"(?<=[.!?…:])\s+|\n+")
 _MIN_SENTENCE = 10
+
+# İlk parça için daha gevşek sınır: virgül ya da cümle sonu yeter.
+# Böylece Riley cevabın ilk yarısını beklemeden konuşmaya başlar.
+_ILK_PARCA = re.compile(r"(?<=[,;:.!?…])\s+")
+_ILK_ASGARI = 18
 
 # Kullanıcı açıkça "bunu unutma" dediğinde modelin remember aracını çağırdığına
 # güvenilemiyor; çoğu zaman sadece "tamam, hatırlarım" diyor. Bu kalıp yakalanınca
@@ -128,6 +134,10 @@ class Agent:
                 await machine.set(State.IDLE)
 
     async def _run(self, user_text: str) -> str:
+        baslangic = time.perf_counter()
+        ilk_belirtec: float | None = None
+        ilk_konusma: float | None = None
+
         await bus.emit("user.said", text=user_text)
         await machine.set(State.THINKING)
 
@@ -147,6 +157,7 @@ class Agent:
 
         final_text = ""
         kullanilan_araclar: set[str] = set()
+        zorlandi = False        # araç çağırması için bir kez zorlandı mı
 
         for round_index in range(CFG.llm.max_tool_rounds):
             buffer = ""          # TTS için cümle biriktirici
@@ -163,16 +174,30 @@ class Agent:
                     continue                      # muhakeme metni seslendirilmez
                 if kind == "delta":
                     piece = event["text"]
+                    if ilk_belirtec is None:
+                        ilk_belirtec = time.perf_counter() - baslangic
                     visible += piece
                     buffer += piece
                     await bus.emit("reply.delta", text=piece)
 
                     # Tam cümle oluştuysa hemen seslendirmeye gönder
+                    # İlk parça daha erken gönderilir: kullanıcı cevabın
+                    # tamamlanmasını beklemesin. Sonraki parçalarda tam cümle
+                    # sınırı beklenir, böylece tonlama bozulmaz.
+                    if ilk_konusma is None:
+                        erken = _ILK_PARCA.split(buffer, maxsplit=1)
+                        if len(erken) > 1 and len(erken[0].strip()) >= _ILK_ASGARI:
+                            await self.speak(erken[0])
+                            ilk_konusma = time.perf_counter() - baslangic
+                            buffer = erken[1]
+
                     parts = _SENTENCE_END.split(buffer)
                     if len(parts) > 1:
                         for sentence in parts[:-1]:
                             if len(sentence.strip()) >= _MIN_SENTENCE:
                                 await self.speak(sentence)
+                                if ilk_konusma is None:
+                                    ilk_konusma = time.perf_counter() - baslangic
                             elif sentence.strip():
                                 parts[-1] = sentence + " " + parts[-1]
                         buffer = parts[-1]
@@ -183,10 +208,39 @@ class Agent:
                 elif kind == "done":
                     if buffer.strip():
                         await self.speak(buffer)
+                        if ilk_konusma is None:
+                            ilk_konusma = time.perf_counter() - baslangic
                         buffer = ""
 
             if not calls:
                 final_text = visible.strip()
+
+                # Model bazen aracı çağırmak yerine çağıracağını anlatıyor
+                # ("set_volume aracını çağırıyorum"). Bir kez daha, bu sefer
+                # açık bir uyarıyla dene.
+                if (
+                    not kullanilan_araclar
+                    and not zorlandi
+                    and _arac_anonsu(final_text)
+                    and round_index < CFG.llm.max_tool_rounds - 1
+                ):
+                    zorlandi = True
+                    await self._konusmayi_bosalt()
+                    await bus.log(
+                        "Model aracı çağırmak yerine anlattı; yeniden deneniyor.",
+                        "warn",
+                    )
+                    messages.append({"role": "assistant", "content": final_text})
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "Az önce bir aracı çağıracağını söyledin ama "
+                            "çağırmadın. Anlatma, şimdi doğrudan ilgili aracı "
+                            "çağır. Araç sonucunu görmeden cevap yazma."
+                        ),
+                    })
+                    continue
+
                 messages.append({"role": "assistant", "content": final_text})
                 break
 
@@ -244,8 +298,31 @@ class Agent:
         if len(self.history) > self.max_history:
             asyncio.create_task(self._gecmisi_kirp())
 
-        await bus.emit("reply.done", text=final_text)
+        await bus.emit(
+            "reply.done",
+            text=final_text,
+            timing={
+                "ilk_belirtec_ms": round((ilk_belirtec or 0) * 1000),
+                "ilk_konusma_ms": round((ilk_konusma or 0) * 1000),
+                "toplam_ms": round((time.perf_counter() - baslangic) * 1000),
+                "arac_sayisi": len(kullanilan_araclar),
+            },
+        )
         return final_text
+
+    async def _konusmayi_bosalt(self) -> None:
+        """Seslendirme kuyruğunda bekleyenleri atar.
+
+        Yanlış bir cevap seslendirilmek üzereyken kullanılır.
+        """
+        from audio.tts import speaker
+
+        while not self.speech_queue.empty():
+            try:
+                self.speech_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        speaker.stop()
 
     async def _gecmisi_kirp(self) -> None:
         """Eski mesajları özete sıkıştırıp geçmişi kısaltır.
@@ -320,6 +397,33 @@ class Agent:
     def reset(self) -> None:
         self.history.clear()
         self.ozet = ""
+
+
+_ANONS_FIILLERI = re.compile(
+    r"(çağır|cagir|kullan|çalıştır|calistir|başlat|baslat)\w*",
+    re.IGNORECASE,
+)
+
+
+def _arac_anonsu(text: str) -> bool:
+    """Metin, bir aracı çağırmak yerine çağıracağını anlatıyor mu?
+
+    Araç adları İngilizce ve alt çizgili olduğu için Türkçe bir cevapta
+    kendiliğinden geçmez; geçiyorsa model aracı çağırmak yerine adını
+    yazmış demektir.
+    """
+    if not text:
+        return False
+    from skills import REGISTRY
+
+    # Model araç adını "system_stats" ya da "System stats" diye yazabilir
+    dusuk = re.sub(r"[_\s]+", " ", text.lower())
+    gecen = any(
+        ad.replace("_", " ") in dusuk for ad in REGISTRY
+    )
+    if not gecen:
+        return False
+    return bool(_ANONS_FIILLERI.search(dusuk))
 
 
 def _describe(tool: str, args: dict) -> str:

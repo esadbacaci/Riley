@@ -45,7 +45,11 @@ class STTConfig:
     language: str = "tr"
     beam_size: int = 5                 # 1 en hızlı, 5 belirgin daha doğru
     vad_aggressiveness: int = 2        # 0-3, yüksek = daha agresif sessizlik kesme
-    silence_ms: int = 800              # bu kadar sessizlikten sonra konuşma bitti say
+    # Konuşma sonu tespiti. Kısa söylemlerde insan duraklayabilir, bu yüzden
+    # daha sabırlı; uzun bir cümle bittiyse beklemeye gerek yok.
+    silence_ms: int = 750              # varsayılan bekleme
+    kisa_sessizlik_ms: int = 450       # uzun söylemden sonra bu kadar yeter
+    uzun_soylem_ms: int = 1500         # bu kadar konuşulduysa "uzun" sayılır
     max_utterance_s: float = 20.0
     min_utterance_ms: int = 350
     # Whisper "Riley" gibi yabancı bir adı Türkçe konuşma içinde tanıyamaz;

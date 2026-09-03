@@ -354,7 +354,15 @@ class Listener:
 
         total_ms = len(self._speech) * FRAME_MS
         too_long = total_ms >= CFG.stt.max_utterance_s * 1000
-        finished = self._silence_ms >= CFG.stt.silence_ms and self._voiced_ms > 0
+
+        # Uzun bir cümle söylendiyse bitişi daha çabuk kabul et; kısa
+        # söylemlerde ise duraklama olabilir diye biraz daha bekle.
+        esik = (
+            CFG.stt.silence_ms
+            if self._voiced_ms < CFG.stt.uzun_soylem_ms
+            else CFG.stt.kisa_sessizlik_ms
+        )
+        finished = self._silence_ms >= esik and self._voiced_ms > 0
         gave_up = self._silence_ms >= 1500 and self._voiced_ms == 0
 
         if gave_up:

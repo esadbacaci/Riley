@@ -219,6 +219,16 @@
           sohbeteEkle("riley", ev.text);
           if (ev.error) sesler.hata();
         }
+        if (ev.timing) {
+          const t = ev.timing;
+          log(
+            `⏱ ilk kelime ${(t.ilk_belirtec_ms / 1000).toFixed(1)} sn · ` +
+            `konuşma ${(t.ilk_konusma_ms / 1000).toFixed(1)} sn · ` +
+            `toplam ${(t.toplam_ms / 1000).toFixed(1)} sn` +
+            (t.arac_sayisi ? ` · ${t.arac_sayisi} araç` : ""),
+            "timing"
+          );
+        }
         break;
 
       case "tool.start":
