@@ -5,6 +5,7 @@ her sürümde çalışmayabilir; bu yüzden hata yakalanıp sessizce CPU'ya geç
 """
 from __future__ import annotations
 
+import re
 import os
 import time
 from pathlib import Path
@@ -269,5 +270,19 @@ def is_noise(text: str) -> bool:
     cumleler = [c.strip() for c in sade.split(".") if len(c.strip()) > 3]
     if len(cumleler) >= 3 and len(set(cumleler)) == 1:
         return True
+
+    # Kelime düzeyinde tekrar. Gerçek kayıtlarda gürültüden "klasik, klasik,
+    # klasik, klasik..." ya da "ekran, ekran, ekran, ekran" gibi çıktılar
+    # geliyordu; bunlar noktayla ayrılmadığı için üstteki denetime takılmıyor.
+    sozcukler = re.findall(r"[a-z0-9']+", sade)
+    if len(sozcukler) >= 4:
+        if len(set(sozcukler)) / len(sozcukler) <= 0.5:
+            return True
+        # Uzun bir sözcüğün üç kez geçmesi de uydurma işareti. Kısa sözcükler
+        # ("bir", "ve", "de") gerçek cümlelerde de tekrar ettiği için
+        # dörtten kısa olanlar sayılmaz.
+        for s in set(sozcukler):
+            if len(s) >= 4 and sozcukler.count(s) >= 3:
+                return True
 
     return False

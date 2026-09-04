@@ -490,6 +490,12 @@ class Listener:
             bus.log_threadsafe(f"(bana değil) {text[:70]}", "debug")
             machine.set_threadsafe(State.IDLE)
             return
+        if not komut:
+            # Kullanıcı yalnızca adımızı söyledi. Dinlemede kalıp komutu
+            # bekliyoruz; burada IDLE'a dönmek az önce kurulan DİNLİYOR
+            # durumunu anında bozuyor ve kullanıcı seslendiğinde hiçbir şey
+            # olmamış gibi görünüyordu.
+            return
 
         bus.emit_threadsafe(
             "transcript", text=komut, final=True, seconds=round(elapsed, 2)
@@ -497,16 +503,21 @@ class Listener:
         self.on_utterance(komut)
 
     def _komuta_cevir(self, text: str, armed: bool) -> str | None:
-        """Söz bize mi söylendi? Öyleyse adı ayıklayıp komutu döndürür."""
+        """Söz bize mi söylendi? Öyleyse adı ayıklayıp komutu döndürür.
+
+        Üç ayrı sonuç var ve bunları karıştırmamak önemli:
+        bir komut (metin), yalnızca adın söylenmesi (boş metin) ve bizimle
+        ilgisi olmayan konuşma (None).
+        """
         eslesme = ad_kalibi().match(text.lower())
         if eslesme:
             kalan = text[eslesme.end():].strip(" ,.!?:;")
             self._armed_until = time.time() + CFG.wake.follow_up_s
             if kalan:
                 return kalan
-            # Sadece adı söylenmiş: dinlemeye geç ve karşılık ver
+            # Sadece adı söylenmiş: dinlemeye geç ve komutu bekle
             bus.emit_threadsafe("wake", score=1.0, barge_in=False)
             machine.set_threadsafe(State.LISTENING, "adıyla çağrıldı")
-            return None
+            return ""
 
         return text if armed else None

@@ -138,7 +138,7 @@ class PiperEngine:
 
     def speak(self, text: str) -> None:
         self._stop.clear()
-        akis = self._akis()
+        self._akis()
 
         try:
             for parca in self._voice.synthesize(text, self._ayar()):
@@ -147,7 +147,14 @@ class PiperEngine:
                 ham = parca.audio_int16_bytes
                 if not ham:
                     continue
-                akis.write(ham)
+                # Yazma da akış kilidinin altında olmak zorunda. Söz kesilince
+                # stop() başka bir iş parçacığından akışı kapatıyor; kilitsiz
+                # bırakıldığında kapanmış akışa yazma denk gelip süreç
+                # segmentation fault ile çöküyordu.
+                with self._stream_lock:
+                    if self._stream is None or self._stop.is_set():
+                        break
+                    self._stream.write(ham)
                 _emit_level(ham)
         except Exception as exc:
             bus.log_threadsafe(f"Seslendirme hatası: {exc}", "error")
