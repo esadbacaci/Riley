@@ -15,7 +15,8 @@ from brain.persona import build_system_prompt
 from config import CFG
 from core.bus import bus
 from core.state import State, machine
-from skills import needs_confirmation, run_skill, tool_schemas
+from brain.secici import araclari_sec, belirgin_niyet, tum_araclar
+from skills import needs_confirmation, run_skill
 from skills.misc import _load_memory
 
 # Cümle sonu: nokta/soru/ünlem + boşluk, ya da satır sonu
@@ -175,14 +176,22 @@ class Agent:
 
         final_text = ""
         kullanilan_araclar: set[str] = set()
+        # (ad, argümanlar, sonuç) — geçmişe araç izini yazmak için
+        tur_izleri: list[tuple[str, dict, str]] = []
         zorlandi = False        # araç çağırması için bir kez zorlandı mı
+
+        # Modele 47 becerinin tamamı yerine söze uyan alt küme gösteriliyor.
+        # Ölçümde tam liste "not defterini aç" isteğini type_text'e,
+        # "wifi'yi kapat" isteğini shutdown'a yönlendiriyordu.
+        secili_araclar = araclari_sec(user_text)
+        genisletildi = False    # tam listeye bir kez düşüldü mü
 
         for round_index in range(CFG.llm.max_tool_rounds):
             buffer = ""          # TTS için cümle biriktirici
             visible = ""         # bu turda üretilen tüm metin
             calls: list[dict] = []
 
-            async for event in llm.chat_stream(messages, tools=tool_schemas()):
+            async for event in llm.chat_stream(messages, tools=secili_araclar):
                 if machine.cancelled:
                     await bus.log("İstek kullanıcı tarafından iptal edildi.", "warn")
                     return ""
@@ -236,10 +245,14 @@ class Agent:
                 # Model bazen aracı çağırmak yerine çağıracağını anlatıyor
                 # ("set_volume aracını çağırıyorum"). Bir kez daha, bu sefer
                 # açık bir uyarıyla dene.
+                # İki durumda araç çağırması için zorlanır: aracı çağıracağını
+                # anlattığında, ya da söz açıkça bir beceriyi işaret ederken
+                # hiçbir şey çağırmadan geçiştirdiğinde ("panodaki metni
+                # okumak için önce onu almalıyız" gibi).
                 if (
                     not kullanilan_araclar
                     and not zorlandi
-                    and _arac_anonsu(final_text)
+                    and (_arac_anonsu(final_text) or belirgin_niyet(user_text))
                     and round_index < CFG.llm.max_tool_rounds - 1
                 ):
                     zorlandi = True
@@ -252,9 +265,38 @@ class Agent:
                     messages.append({
                         "role": "system",
                         "content": (
-                            "Az önce bir aracı çağıracağını söyledin ama "
-                            "çağırmadın. Anlatma, şimdi doğrudan ilgili aracı "
-                            "çağır. Araç sonucunu görmeden cevap yazma."
+                            "Bu isteği yerine getirmek için bir araç "
+                            "çağırman gerekiyor ama çağırmadın. Ne yapacağını "
+                            "anlatma, şimdi doğrudan ilgili aracı çağır. Araç "
+                            "sonucunu görmeden cevap yazma. İstek gerçekten "
+                            "araç gerektirmiyorsa normal cevabını ver."
+                        ),
+                    })
+                    continue
+
+                # Seçici doğru beceriyi kaçırmış olabilir. Model "böyle bir
+                # aracım yok" diyorsa tam listeyle bir kez daha deniyoruz;
+                # böylece alt küme bir şeyi ıskalasa da beceri erişilebilir
+                # kalıyor.
+                if (
+                    not kullanilan_araclar
+                    and not genisletildi
+                    and _arac_yok_diyor(final_text)
+                    and len(secili_araclar) < len(tum_araclar())
+                    and round_index < CFG.llm.max_tool_rounds - 1
+                ):
+                    genisletildi = True
+                    secili_araclar = tum_araclar()
+                    await self._konusmayi_bosalt()
+                    await bus.log(
+                        "Beceri bulunamadı; tam listeyle yeniden deneniyor.",
+                        "warn",
+                    )
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "Elindeki araç listesi genişletildi. İsteği "
+                            "yeniden değerlendir ve uygun aracı çağır."
                         ),
                     })
                     continue
@@ -298,6 +340,7 @@ class Agent:
                     "name": name,
                     "content": str(payload)[:4000],
                 })
+                tur_izleri.append((name, args, str(payload)))
 
             await machine.set(State.THINKING)
         else:
@@ -310,6 +353,30 @@ class Agent:
         await self._hafizayi_guvenceye_al(user_text, kullanilan_araclar)
 
         self.history.append({"role": "user", "content": user_text})
+        # Araç çağrılarını geçmişe gerçek biçimleriyle yazıyoruz. Yalnızca son
+        # cümleyi saklarsak model kendi geçmişinde "saat kaç diye sordu, doğrudan
+        # saati söyledim" görüyor ve bunu "araç çağırmadan cevap ver" kalıbı
+        # sanıyor: ölçümde tek turluk sohbette 5/5 olan araç doğruluğu, sohbet
+        # sürdüğünde panoyu hiç okumadan hatırladığı bir bilgiyi pano içeriği
+        # diye sunacak kadar bozuluyordu.
+        #
+        # Bunu düz metin bir not olarak yazmak işe yaramadı: model notu cevabın
+        # parçası sanıp taklit etti, "[clipboard_read aracını çağırdım]" diye
+        # konuştu ama aracı yine çağırmadı. Sohbet şablonunun araç çağrılarını
+        # ayrı işlemesi için asıl alanları kullanıyoruz.
+        if tur_izleri:
+            self.history.append({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {"function": {"name": ad, "arguments": arg}}
+                    for ad, arg, _ in tur_izleri
+                ],
+            })
+            for ad, _, sonuc in tur_izleri:
+                self.history.append({
+                    "role": "tool", "name": ad, "content": sonuc[:600],
+                })
         self.history.append({"role": "assistant", "content": final_text})
 
         # Kırpma cevabı geciktirmesin; arka planda yapılır
@@ -329,10 +396,13 @@ class Agent:
         return final_text
 
     async def _konusmayi_bosalt(self) -> None:
-        """Seslendirme kuyruğunda bekleyenleri atar.
+        """Yarım kalan cevabı hem hoparlörden hem ekrandan geri alır.
 
-        Yanlış bir cevap seslendirilmek üzereyken kullanılır.
+        Model bir aracı çağırmak yerine geçiştirdiğinde o cümleyi atıp yeniden
+        deniyoruz; atılan cümle ekranda kalırsa kullanıcı iki cevabı birbirine
+        yapışmış görüyordu.
         """
+        await bus.emit("reply.iptal")
         from audio.tts import speaker
 
         while not self.speech_queue.empty():
@@ -352,8 +422,20 @@ class Agent:
         if len(self.history) <= self.max_history:
             return
 
-        dusen = self.history[: len(self.history) - self.tutulacak]
-        kalan = self.history[len(self.history) - self.tutulacak :]
+        kesim = len(self.history) - self.tutulacak
+        # Geçmişte araç çağrısı kayıtları var. Kesim noktası bir tool mesajının
+        # ya da onu doğuran assistant mesajının ortasına düşerse geride sahipsiz
+        # bir tool mesajı kalıyor ve model bunu reddediyor. Güvenli sınıra kadar
+        # ilerlet: kalan her zaman user veya düz assistant mesajıyla başlasın.
+        while kesim < len(self.history):
+            m = self.history[kesim]
+            if m.get("role") == "tool" or m.get("tool_calls"):
+                kesim += 1
+                continue
+            break
+
+        dusen = self.history[:kesim]
+        kalan = self.history[kesim:]
 
         dokum = "\n".join(
             f"{'Kullanıcı' if m['role'] == 'user' else 'Riley'}: {m['content']}"
@@ -417,8 +499,28 @@ class Agent:
         self.ozet = ""
 
 
+# Model uygun beceriyi bulamadığında kurduğu tipik cümleler. Bunlar
+# görülürse araç listesi dar kalmış olabilir; tam listeyle tekrar denenir.
+_ARAC_YOK = re.compile(
+    r"(fonksiyon|araç|arac|komut|özellik|ozellik|yetenek)\w*\s+"
+    r"(listesinde\s+)?(bulunm|yok|mevcut değil|mevcut degil|değil)"
+    r"|böyle\s+bir\s+(fonksiyon|araç|arac|özellik)"
+    r"|(yapamam|yapamıyorum|edemiyorum|elimde\s+yok)"
+    r"|(none\s+of\s+the\s+provided|i\s+don't\s+have)",
+    re.IGNORECASE,
+)
+
+
+def _arac_yok_diyor(text: str) -> bool:
+    return bool(text) and bool(_ARAC_YOK.search(text))
+
+
+# "çağır" edilgen çekimde sesli düşürüyor: çağrılıyor, çağrıldı. Yalnızca
+# "çağır" aranınca bu biçimler kaçıyordu ve model aracı çağırmak yerine
+# "clipboard_read aracı çağrılıyor" deyip duruyordu.
 _ANONS_FIILLERI = re.compile(
-    r"(çağır|cagir|kullan|çalıştır|calistir|başlat|baslat)\w*",
+    r"(çağır|çağr|cagir|cagr|kullan|çalıştır|calistir|başlat|baslat|"
+    r"deniyorum|bakıyorum|alıyorum|açıyorum)\w*",
     re.IGNORECASE,
 )
 

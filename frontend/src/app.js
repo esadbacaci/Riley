@@ -203,6 +203,13 @@
         break;
 
       case "transcript":
+        // Sesli girdi iki olay üretiyor: mikrofon "transcript", ajan da
+        // "user.said". İkisini de yazınca aynı söz ekranda iki kez
+        // görünüyordu. Burada yalnızca çözümleme süresini gösteriyoruz,
+        // metni "user.said" yazıyor.
+        if (ev.seconds) log(`⏱ ses tanıma ${ev.seconds.toFixed(2)} sn`, "timing");
+        break;
+
       case "user.said":
         el.you.textContent = ev.text;
         el.me.textContent = "";
@@ -210,6 +217,13 @@
         sonSoru = ev.text;
         log("sen: " + ev.text);
         sohbeteEkle("sen", ev.text);
+        break;
+
+      case "reply.iptal":
+        // Riley cevabı yarıda kesip yeniden kuruyor (araç çağırması gerekti).
+        // Atılan metin ekranda kalmasın.
+        replyBuffer = "";
+        el.me.textContent = "";
         break;
 
       case "reply.delta":
@@ -423,6 +437,29 @@
       sel.value = m.current;
 
       hafizayiYukle();
+      aygitlariYukle();
+    } catch { /* sunucu hazır değil */ }
+  }
+
+  async function aygitlariYukle() {
+    try {
+      const a = await (await fetch(`${API}/api/audio-devices`)).json();
+      const doldur = (sec, liste, secili) => {
+        sec.innerHTML = "";
+        const varsayilan = document.createElement("option");
+        varsayilan.value = "";
+        varsayilan.textContent = "Sistem varsayılanı";
+        sec.appendChild(varsayilan);
+        for (const d of liste) {
+          const o = document.createElement("option");
+          o.value = String(d.index);
+          o.textContent = d.name + (d.default ? "  (sistem varsayılanı)" : "");
+          sec.appendChild(o);
+        }
+        sec.value = secili === null || secili === undefined ? "" : String(secili);
+      };
+      doldur($("setCikis"), a.cikis || [], a.secili_cikis);
+      doldur($("setGiris"), a.giris || [], a.secili_giris);
     } catch { /* sunucu hazır değil */ }
   }
 
@@ -466,6 +503,35 @@
     ayarGonder({ address: e.target.value }));
   $("setSttModel").addEventListener("change", (e) =>
     ayarGonder({ stt_model: e.target.value }));
+
+  $("setCikis").addEventListener("change", async (e) => {
+    // Aygıtı ayarla ve hemen deneme sesi çal; doğru seçildiği anında anlaşılsın
+    try {
+      await fetch(`${API}/api/test-sound`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device: e.target.value }),
+      });
+      el.not.textContent = "Deneme sesi çalınıyor...";
+      setTimeout(() => { el.not.textContent = ""; }, 4000);
+    } catch { el.not.textContent = "Ses aygıtı değiştirilemedi."; }
+  });
+
+  $("setGiris").addEventListener("change", (e) =>
+    ayarGonder({ input_device: e.target.value === "" ? null : parseInt(e.target.value, 10) },
+               "Mikrofon değişti, yeniden başlatınca geçerli olacak."));
+
+  $("btnSesTesti").addEventListener("click", async () => {
+    try {
+      await fetch(`${API}/api/test-sound`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      el.not.textContent = "Deneme sesi çalınıyor...";
+      setTimeout(() => { el.not.textContent = ""; }, 4000);
+    } catch { el.not.textContent = "Ses testi başarısız."; }
+  });
   $("setYetki").addEventListener("change", (e) =>
     ayarGonder({ perm_level: e.target.value }, "Yetki seviyesi değişti."));
 

@@ -22,7 +22,11 @@ class LLMConfig:
     host: str = "http://127.0.0.1:11434"
     model: str = "qwen3:8b"
     temperature: float = 0.6
-    num_ctx: int = 8192
+    # 8192 iken model 6.2 GB yer kaplıyordu ve Whisper turbo ile birlikte
+    # bellek %94'e çıkıyordu; ölçümde üretim hızı 70'ten 32 token/sn'ye
+    # düşüyordu. Sohbet geçmişi zaten özetlendiği için bu kadar bağlam
+    # gerekmiyor.
+    num_ctx: int = 4096
     keep_alive: str = "30m"
     # qwen3 varsayılan olarak "düşünme" modunda çalışır: cevap öncesi uzun bir
     # muhakeme metni üretir. Sesli asistanda bu hem gecikme hem de saçma
@@ -38,13 +42,18 @@ class STTConfig:
     # kaynağı az dillerde daha da açılıyor. Bedeli ~1 GB fazla bellek ve
     # çözümleme başına birkaç yüz milisaniye; buna değer.
     # Bellek dar gelirse "small" hâlâ seçilebilir.
-    model_size: str = "deepdml/faster-whisper-large-v3-turbo-ct2"
+    # turbo daha isabetli ama 2,1 GB VRAM yiyor. 8 GB kartta LLM ile
+    # birlikte sığmıyor: ölçümde qwen3:8b 62 token/sn yerine 13 token/sn'ye
+    # düşüyordu. small 576 MB ve çözümlemesi de 2,8 kat hızlı (0,19 sn).
+    model_size: str = "small"
     # "auto" önce GPU dener, hata alırsa işlemciye düşer.
     device: str = "auto"
     compute_type_gpu: str = "float16"
     compute_type_cpu: str = "int8"
     language: str = "tr"
-    beam_size: int = 5                 # 1 en hızlı, 5 belirgin daha doğru
+    # Ölçümde turbo ile beam 1 ve beam 5 aynı doğruluğu verdi (0.80 / 0.78);
+    # beam 1 daha az iş yapıyor, o yüzden varsayılan bu.
+    beam_size: int = 1
     # Konuşma tespiti. "silero" küçük bir sinir ağı ve klavye/fan gibi
     # sesleri konuşma sanmıyor; webrtcvad ham genliğe baktığı için hem
     # yanlış tetikleniyor hem kısık konuşmayı kaçırıyordu.
@@ -66,7 +75,15 @@ class STTConfig:
     # ("Google Chrome, aç, kapat, ekran görüntüsü, ses, yüzde..."). Bu yüzden
     # ipuçları kısa tutuluyor ve çıktı sızıntıya karşı ayrıca süzülüyor.
     initial_prompt: str = "Riley'e sesleniyorum."
-    hotwords: str = "Riley"
+    # Alan adları ve teknik sözcükler Türkçe konuşma içinde en çok yanlış
+    # anlaşılan şeyler: "github.com'u aç" -> "Ditap nokta komaçi" gibi.
+    # Ölçüldüğünde bu liste belirgin fayda sağladı ve sızıntı yapmadı;
+    # yine de çıktı sızıntıya karşı ayrıca süzülüyor.
+    hotwords: str = (
+        "Riley, github, youtube, gmail, google, stackoverflow, chatgpt, "
+        "reddit, instagram, whatsapp, linkedin, netflix, spotify, wikipedia, "
+        "twitter, amazon, discord, twitch, nokta com"
+    )
     # Halüsinasyon süzgeci: bu eşiklerin dışındaki çözümlemeler atılır
     no_speech_max: float = 0.6     # konuşma yokluğu olasılığı üst sınırı
     min_logprob: float = -1.0      # ortalama güven alt sınırı
@@ -167,7 +184,7 @@ class PersonaConfig:
 # settings.json bütün ayarları kaydettiği için, bir varsayılanı sonradan
 # iyileştirdiğimizde eski dosya onu maskeliyor. Sürüm numarası artınca
 # GECISLER'de sayılan alanlar diskten değil koddan alınır.
-AYAR_SURUMU = 4
+AYAR_SURUMU = 6
 
 GECISLER: dict[int, list[str]] = {
     # Söz kesme eşikleri fazla hassastı: Riley kendi sesini araya giren
@@ -192,6 +209,16 @@ GECISLER: dict[int, list[str]] = {
     4: [
         "stt.model_size",
         "audio.block_ms",
+    ],
+    # Bellek baskısı ölçüldü: bağlam penceresi küçültüldü, arama genişliği
+    # düşürüldü. Kaydedilmiş eski değerler bunları maskelemesin.
+    5: [
+        "llm.num_ctx",
+        "stt.beam_size",
+    ],
+    # turbo'nun 2,1 GB'ı LLM'i bellek darboğazına sokuyordu; small'a dönüldü.
+    6: [
+        "stt.model_size",
     ],
 }
 

@@ -326,6 +326,8 @@ _AYARLANABILIR: dict[str, tuple[str, str, type]] = {
     "model": ("llm", "model", str),
     "temperature": ("llm", "temperature", float),
     "perm_level": ("perms", "level", str),
+    "output_device": ("audio", "output_device", int),
+    "input_device": ("audio", "input_device", int),
     "stt_model": ("stt", "model_size", str),
     "beam_size": ("stt", "beam_size", int),
 }
@@ -381,6 +383,58 @@ async def list_models() -> JSONResponse:
         return JSONResponse({"models": await llm.list_models(), "current": CFG.llm.model})
     except Exception as exc:
         return JSONResponse({"models": [], "current": CFG.llm.model, "error": str(exc)})
+
+
+@app.get("/api/audio-devices")
+async def audio_devices() -> JSONResponse:
+    """Ses giriş ve çıkış aygıtlarını listeler.
+
+    "Ses gelmiyor" şikayetinin en sık sebebi yanlış çıkış aygıtı: sistem
+    varsayılanı kulaklık olurken kullanıcı hoparlörden dinliyor olabiliyor.
+    """
+    try:
+        import sounddevice as sd
+
+        aygitlar = sd.query_devices()
+        varsayilan_giris, varsayilan_cikis = sd.default.device
+
+        def _liste(yon: str) -> list[dict]:
+            alan = "max_input_channels" if yon == "giris" else "max_output_channels"
+            varsayilan = varsayilan_giris if yon == "giris" else varsayilan_cikis
+            return [
+                {
+                    "index": i,
+                    "name": d["name"],
+                    "default": i == varsayilan,
+                }
+                for i, d in enumerate(aygitlar)
+                if d[alan] > 0
+            ]
+
+        return JSONResponse({
+            "giris": _liste("giris"),
+            "cikis": _liste("cikis"),
+            "secili_giris": CFG.audio.input_device,
+            "secili_cikis": CFG.audio.output_device,
+        })
+    except Exception as exc:
+        return JSONResponse({"giris": [], "cikis": [], "error": str(exc)})
+
+
+@app.post("/api/test-sound")
+async def test_sound(request: Request) -> JSONResponse:
+    """Seçilen çıkış aygıtından deneme sesi çalar."""
+    from audio.tts import speaker
+
+    gelen = await request.json() if await request.body() else {}
+    aygit = gelen.get("device")
+    if aygit is not None:
+        CFG.audio.output_device = int(aygit) if aygit != "" else None
+        CFG.save()
+        speaker.cikisi_yenile()
+
+    await agent.speak("Ses testi. Beni duyuyorsanız bu aygıt doğru.")
+    return JSONResponse({"ok": True, "device": CFG.audio.output_device})
 
 
 @app.get("/api/memory")

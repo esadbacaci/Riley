@@ -84,8 +84,22 @@ class PiperEngine:
                     dtype="int16",
                     blocksize=0,          # sürücü kendi seçsin, daha az takılma
                     device=CFG.audio.output_device,
+                    latency="low",        # sürücü tamponu küçük kalsın
                 )
                 self._stream.start()
+
+                # "Ses gelmiyor" durumunda ilk bakılacak yer burası: sistem
+                # varsayılanı kulaklık olabilir ama kullanıcı hoparlörden
+                # dinliyor olabilir.
+                try:
+                    aygit = sd.query_devices(
+                        self._stream.device, "output"
+                    )["name"]
+                except Exception:
+                    aygit = str(CFG.audio.output_device)
+                bus.log_threadsafe(
+                    f"Ses çıkışı: {aygit} ({self.sample_rate} Hz)", "info"
+                )
             return self._stream
 
     def _akisi_kapat(self) -> None:
@@ -214,6 +228,12 @@ class Speaker:
             self.init()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="tts")
         self._thread.start()
+
+    def cikisi_yenile(self) -> None:
+        """Çıkış aygıtı değişince akışı kapatır; sonraki cümlede yenisi açılır."""
+        kapat = getattr(self.engine, "_akisi_kapat", None)
+        if callable(kapat):
+            kapat()
 
     def _loop(self) -> None:
         while True:

@@ -44,6 +44,21 @@ KARISIKLIKLAR: dict[str, str] = {
     "vörd": "Word", "vord": "Word",
     "fotoşop": "Photoshop", "fotosop": "Photoshop",
     "netflix'i": "Netflix",
+    # Alan adları ve teknik sözcükler. Gerçek kullanımda en çok bunlar
+    # yanlış anlaşılıyor: "github.com'u aç" -> "Ditap nokta komaçi".
+    "ditap": "github", "gitap": "github", "githab": "github",
+    "gıthab": "github", "git hub": "github", "cithab": "github",
+    "komaci": "com", "komaçi": "com", "kom": "com", "kam": "com",
+    "cihat gpt": "ChatGPT", "cihatgpt": "ChatGPT", "çet gpt": "ChatGPT",
+    "chat gpt": "ChatGPT", "cet gepete": "ChatGPT",
+    "stagic overflow": "Stack Overflow", "stack overflov": "Stack Overflow",
+    "istek overflow": "Stack Overflow",
+    "nümayil": "gmail", "cimeyl": "gmail", "cmail": "gmail",
+    "gmayil": "gmail", "ci mail": "gmail",
+    "redit": "Reddit", "linkedin": "LinkedIn", "linkdin": "LinkedIn",
+    "vikipedi": "Wikipedia", "vikipedia": "Wikipedia",
+    "instagıram": "Instagram", "instagram": "Instagram",
+    "tviter": "Twitter", "tvitir": "Twitter",
     "not tefteri": "not defteri", "note tefteri": "not defteri",
     "nottefteri": "not defteri", "not tefterini": "not defterini",
     "note tefterini": "not defterini",
@@ -53,6 +68,15 @@ KARISIKLIKLAR: dict[str, str] = {
 
 # Uygulama adı düzeltmesinin çalışacağı bağlam: bu fiillerden biri cümlede
 # geçmiyorsa benzerlik eşleştirmesi hiç denenmez.
+# Komut sonunda sık duyulan yanlışlar. "ağaç" neredeyse her zaman "aç"
+# demektir; "gider misin" yerine "gide misin" gibi kırpılmalar da olur.
+FIIL_DUZELTMELERI = {
+    "ağaç": "aç", "agac": "aç", "aca": "aç", "açaç": "aç",
+    "kapa t": "kapat", "kapatt": "kapat",
+    "baslat": "başlat", "baslatt": "başlat",
+}
+
+
 _FIIL_KALIBI = re.compile(
     r"\b(aç|açar|açsana|başlat|çalıştır|kapat|kapatır|göster|geç)\w*\b",
     re.IGNORECASE,
@@ -103,10 +127,21 @@ def duzelt(metin: str) -> str:
     for i, parca in enumerate(parcalar):
         if not parca.strip():
             continue
-        karsilik = KARISIKLIKLAR.get(_sadelestir(parca))
+        sade = _sadelestir(parca)
+        karsilik = KARISIKLIKLAR.get(sade) or FIIL_DUZELTMELERI.get(sade)
         if karsilik:
             parcalar[i] = karsilik
     sonuc = "".join(parcalar)
+
+    # "github nokta com" -> "github.com". Konuşurken nokta söyleniyor ama
+    # araca verilecek adres birleşik olmalı.
+    sonuc = re.sub(
+        r"([a-zA-Z][\w-]{1,30})\s+nokta\s+(com|net|org|io|dev|co|edu|gov)"
+        r"(?:\s+nokta\s+(tr|uk|de))?",
+        lambda m: f"{m.group(1)}.{m.group(2)}" + (f".{m.group(3)}" if m.group(3) else ""),
+        sonuc,
+        flags=re.IGNORECASE,
+    )
 
     # --- 2. Kurulu uygulamalara benzerlik (yalnızca fiil bağlamında) ---
     if not _FIIL_KALIBI.search(sonuc):
